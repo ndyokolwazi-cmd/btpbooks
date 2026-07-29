@@ -38,20 +38,20 @@ const fmtDate=d=>d?new Date(d+'T00:00:00').toLocaleDateString('en-ZA',{day:'2-di
 const fmtMoney=(n,sym='R')=>`${sym} ${Number(n||0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,',')}`
 const calcTotals=(items,vr)=>{let s=0,v=0;items.forEach(it=>{const n=it.qty*it.rate*(1-(it.discount||0)/100);s+=n;if(vr)v+=n*(it.vatRate||0)/100});return{subtotal:s,vat:v,total:s+v}}
 
-// Trial check - 14 days from account creation
-const isTrialActive = (user) => {
-  if (!user) return false
-  const created = new Date(user.created_at)
-  const now = new Date()
-  const diffDays = (now - created) / (1000 * 60 * 60 * 24)
-  return diffDays <= 14
-}
-const trialDaysLeft = (user) => {
-  if (!user) return 0
-  const created = new Date(user.created_at)
-  const now = new Date()
-  const diffDays = (now - created) / (1000 * 60 * 60 * 24)
-  return Math.max(0, Math.ceil(14 - diffDays))
+// Subscription-based access check
+const checkAccess = (sub) => {
+  if (!sub) return {active:false, trial:false, daysLeft:0}
+  if (sub.status === 'active') {
+    const ends = sub.subscription_ends_at ? new Date(sub.subscription_ends_at) : null
+    if (!ends || ends > new Date()) return {active:true, trial:false, daysLeft:0}
+  }
+  if (sub.status === 'trial') {
+    const trialEnds = new Date(sub.trial_ends_at)
+    const now = new Date()
+    const daysLeft = Math.max(0, Math.ceil((trialEnds - now) / (1000*60*60*24)))
+    if (daysLeft > 0) return {active:true, trial:true, daysLeft}
+  }
+  return {active:false, trial:false, daysLeft:0}
 }
 
 const CSS = `
@@ -796,6 +796,7 @@ export default function Dashboard(){
   const [sidebarOpen,setSidebarOpen]=useState(false)
   const [isMobile,setIsMobile]=useState(false)
   const [newDocType,setNewDocType]=useState(null)
+  const [subscription,setSubscription]=useState(null)
 
   useEffect(()=>{
     const style=document.createElement('style');style.textContent=CSS;document.head.appendChild(style)
@@ -817,13 +818,15 @@ export default function Dashboard(){
 
   const loadAll=async(u)=>{
     setLoading(true)
-    const [cos,cls,ds]=await Promise.all([
+    const [cos,cls,ds,sub]=await Promise.all([
       supabase.from('companies').select('*').eq('user_id',u.id).order('created_at'),
       supabase.from('clients').select('*').eq('user_id',u.id).order('name'),
       supabase.from('documents').select('*').eq('user_id',u.id).order('created_at',{ascending:false}),
+      supabase.from('subscriptions').select('*').eq('user_id',u.id).single(),
     ])
     const coList=cos.data||[]
     setCompanies(coList);setClients(cls.data||[]);setDocs(ds.data||[])
+    setSubscription(sub.data||null)
     if(coList.length)setActiveCoId(coList[0].id)
     setLoading(false)
   }
@@ -871,11 +874,10 @@ export default function Dashboard(){
 
   if(user===undefined||loading)return <div className="loading"><div className="spinner"/><span style={{color:T.grey400}}>Loading Invoxa…</span></div>
 
-  // Trial check
-  const trialActive=isTrialActive(user)
-  const daysLeft=trialDaysLeft(user)
+  // Subscription access check
+  const access=checkAccess(subscription)
 
-  if(!trialActive&&companies.length>0){
+  if(!access.active&&companies.length>0){
     return <div className="expired-wall">
       <div style={{fontSize:48,marginBottom:8}}>⏰</div>
       <h1 style={{fontSize:28,fontWeight:900,color:T.navy,letterSpacing:'-1px'}}>Your trial has ended</h1>
@@ -883,7 +885,7 @@ export default function Dashboard(){
       <div style={{background:T.white,border:`1px solid ${T.grey200}`,borderRadius:12,padding:'24px 32px',textAlign:'center',marginTop:8}}>
         <div style={{fontSize:36,fontWeight:900,color:T.navy}}>R149<span style={{fontSize:16,fontWeight:500,color:T.grey600}}>/month</span></div>
         <p style={{color:T.grey600,fontSize:13,margin:'8px 0 16px'}}>All features · Unlimited documents · Cloud sync</p>
-        <a href="mailto:ndyoko.lwazi@gmail.com?subject=Invoxa Subscription&body=Hi, I would like to subscribe to Invoxa at R149/month. My account email is: ${user?.email}"
+        <a href={`mailto:ndyoko.lwazi@gmail.com?subject=Invoxa Subscription&body=Hi, I would like to subscribe to Invoxa at R149/month. My account email is: ${user?.email}`}
           style={{display:'inline-block',background:T.blue,color:'#fff',padding:'12px 28px',borderRadius:9,fontWeight:700,fontSize:14,textDecoration:'none'}}>
           Subscribe via Email →
         </a>
@@ -911,10 +913,10 @@ export default function Dashboard(){
   return <div className="layout">
     <Sidebar page={page} setPage={setPage} companies={companies} activeCoId={activeCoId} setActiveCoId={setActiveCoId} user={user} onSignOut={signOut} mobile={isMobile} open={sidebarOpen} setOpen={setSidebarOpen}/>
     <div className="main">
-      {trialActive&&daysLeft<=5&&(
+      {access.trial&&access.daysLeft<=5&&(
         <div className="trial-bar no-print">
-          ⏳ {daysLeft} day{daysLeft!==1?'s':''} left in your free trial.
-          <a href="mailto:ndyoko.lwazi@gmail.com?subject=Invoxa Subscription&body=Hi, I would like to subscribe to Invoxa. My account email is: ${user?.email}">Subscribe now for R149/month →</a>
+          ⏳ {access.daysLeft} day{access.daysLeft!==1?'s':''} left in your free trial.
+          <a href={`mailto:ndyoko.lwazi@gmail.com?subject=Invoxa Subscription&body=Hi, I would like to subscribe to Invoxa. My account email is: ${user?.email}`}>Subscribe now for R149/month →</a>
         </div>
       )}
       <div className="topbar no-print">
@@ -927,7 +929,8 @@ export default function Dashboard(){
         </div>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
           <span style={{fontSize:11,color:T.green,fontWeight:700}}>● Cloud Synced</span>
-          {trialActive&&<span style={{fontSize:11,color:T.amber,fontWeight:700}}>Trial: {daysLeft}d left</span>}
+          {access.trial&&<span style={{fontSize:11,color:T.amber,fontWeight:700}}>Trial: {access.daysLeft}d left</span>}
+          {!access.trial&&access.active&&<span style={{fontSize:11,color:T.green,fontWeight:700}}>✓ Active</span>}
         </div>
       </div>
       <div className="content">{pages[page]||pages.dashboard}</div>

@@ -381,11 +381,34 @@ function LineItems({items,setItems,vatReg,sym}){
   </div>
 }
 
+const QUOTE_TC = `1. VALIDITY: This quotation is valid for 30 days from the date of issue.
+
+2. ACCEPTANCE: Acceptance of this quotation constitutes agreement to these terms. Please confirm acceptance in writing or via email.
+
+3. PAYMENT TERMS: A 50% deposit is required upon acceptance. The balance is due within 30 days of completion/delivery. EFT payment preferred.
+
+4. LATE PAYMENT: Overdue accounts attract interest at 2% per month compounded monthly.
+
+5. CANCELLATION: Cancellation after acceptance forfeits the deposit. Cancellation after commencement of work will be charged at the rate of work completed.
+
+6. INTELLECTUAL PROPERTY: All work product remains the property of ${'{company}'} until payment is received in full.
+
+7. CONFIDENTIALITY: Both parties agree to keep all business information shared during this engagement confidential.
+
+8. GOVERNING LAW: This agreement is governed by the laws of the Republic of South Africa. Any disputes shall be resolved in the jurisdiction of the Western Cape High Court.
+
+9. FORCE MAJEURE: Neither party shall be liable for delays caused by circumstances beyond their reasonable control.`
+
 // ── Doc Form ───────────────────────────────────────────────────────────────────
 function DocForm({doc,company,clients,docType,onSave,onClose,onConvertQuote}){
   const dt=DT[docType]||DT.invoice
   const nextNo=company?.next_nos?.[docType]||1
-  const blank={number:`${dt.prefix}-${nextNo}`,status:'Draft',date:today(),due:docType==='invoice'?addDays(today(),30):today(),client_id:'',client_name:'',client_address:'',client_vat:'',po_number:'',ref:'',notes:'',terms:docType==='invoice'?'Payment due within 30 days. EFT preferred.':''}
+  const defaultTerms = docType==='invoice'
+    ? 'Payment due within 30 days. EFT preferred. Overdue accounts attract interest at 2% per month.'
+    : docType==='quote'
+    ? QUOTE_TC.replace('${\'company\'}', company?.name||'the service provider')
+    : ''
+  const blank={number:`${dt.prefix}-${nextNo}`,status:'Draft',date:today(),due:docType==='invoice'?addDays(today(),30):docType==='quote'?addDays(today(),30):today(),client_id:'',client_name:'',client_address:'',client_vat:'',po_number:'',ref:'',notes:'',terms:defaultTerms}
   const [f,setF]=useState(doc||blank)
   const [items,setItems]=useState(doc?.items||[{id:uid(),desc:'',qty:1,unit:'',rate:0,vatRate:company?.vat_registered?15:0,discount:0}])
   const set=(k,v)=>setF(p=>({...p,[k]:v}))
@@ -416,7 +439,7 @@ function DocForm({doc,company,clients,docType,onSave,onClose,onConvertQuote}){
     </div>
     <div className="g2" style={{paddingTop:12,borderTop:`1px solid ${T.grey200}`,marginBottom:16}}>
       <div className="field"><Lbl text="Notes to Client"/><Inp value={f.notes||''} onChange={v=>set('notes',v)} rows={3} placeholder="Additional notes…"/></div>
-      <div className="field"><Lbl text="Terms"/><Inp value={f.terms||''} onChange={v=>set('terms',v)} rows={3}/></div>
+      <div className="field"><Lbl text="Terms & Conditions"/><Inp value={f.terms||''} onChange={v=>set('terms',v)} rows={docType==='quote'?12:3}/></div>
     </div>
     <div style={{display:'flex',gap:10,justifyContent:'flex-end',paddingTop:12,borderTop:`1px solid ${T.grey200}`,flexWrap:'wrap'}}>
       {docType==='quote'&&doc&&<Btn v="tl" onClick={()=>onConvertQuote(doc)}>Convert to Invoice</Btn>}
@@ -572,7 +595,7 @@ function DocPrint({doc,company,onBack}){
       {(doc.notes||doc.terms)&&(
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:18,marginBottom:14}}>
           {doc.notes&&<div><div style={{fontSize:10,fontWeight:800,color:'#374151',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:3}}>Notes</div><div style={{fontSize:11,color:T.grey600,lineHeight:1.6}}>{doc.notes}</div></div>}
-          {doc.terms&&<div><div style={{fontSize:10,fontWeight:800,color:'#374151',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:3}}>Terms</div><div style={{fontSize:11,color:T.grey600,lineHeight:1.6}}>{doc.terms}</div></div>}
+          {doc.terms&&<div><div style={{fontSize:10,fontWeight:800,color:'#374151',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:3}}>Terms &amp; Conditions</div><div style={{fontSize:11,color:T.grey600,lineHeight:1.7,whiteSpace:'pre-line'}}>{doc.terms}</div></div>}
         </div>
       )}
       <div style={{textAlign:'center',fontSize:10,color:'#374151',paddingTop:12,borderTop:`1px solid ${T.grey100}`}}>

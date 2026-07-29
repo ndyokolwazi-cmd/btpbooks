@@ -440,22 +440,45 @@ function DocPrint({doc,company,onBack}){
   const tot=doc.totals||{subtotal:0,vat:0,total:0}
 
   const whatsapp=()=>{
-    const msg=`Hi, please find attached ${dt.label} ${doc.number} for ${sym} ${Number(tot.total).toFixed(2)} due ${fmtDate(doc.due||doc.date)}. Reference: ${doc.number}.`
+    const msg=`Hi ${doc.client_name},\n\nPlease see ${dt.label} ${doc.number} from ${company?.name} for *${sym} ${Number(tot.total).toFixed(2)}*${doc.due?` due ${fmtDate(doc.due)}`:''} attached.\n\nReference: ${doc.number}\n\nKind regards,\n${company?.name}${company?.phone?'\n'+company.phone:''}`
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`)
   }
   const email=()=>{
     const sub=`${dt.label} ${doc.number} - ${company?.name}`
-    const body=`Dear ${doc.client_name},\n\nPlease find attached ${dt.label} ${doc.number} for ${sym} ${Number(tot.total).toFixed(2)}.\n\nDue: ${fmtDate(doc.due||doc.date)}\nRef: ${doc.number}\n\nKind regards,\n${company?.name}`
+    const body=`Dear ${doc.client_name},\n\nPlease find ${dt.label} ${doc.number} attached.\n\nAmount: ${sym} ${Number(tot.total).toFixed(2)}${doc.due?`\nDue Date: ${fmtDate(doc.due)}`:''}\nReference: ${doc.number}\n\nBanking Details:\n${banking.map(b=>`Bank: ${b.bank}\nAccount Name: ${b.accountName}\nAccount No: ${b.accountNo}\nBranch Code: ${b.branchCode}`).join('\n')}\n\nKind regards,\n${company?.name}`
     window.open(`mailto:?subject=${encodeURIComponent(sub)}&body=${encodeURIComponent(body)}`)
   }
+  const share=async()=>{
+    if(navigator.share){
+      try{
+        await navigator.share({
+          title:`${dt.label} ${doc.number}`,
+          text:`${dt.label} ${doc.number} from ${company?.name} for ${sym} ${Number(tot.total).toFixed(2)}${doc.due?` due ${fmtDate(doc.due)}`:''}. Ref: ${doc.number}.`,
+        })
+      }catch(e){}
+    } else {
+      whatsapp()
+    }
+  }
+  const isMobileDevice=()=>typeof navigator!=='undefined'&&/iPhone|iPad|Android|Mobile/i.test(navigator.userAgent)
 
   return <div>
-    <div className="no-print" style={{display:'flex',gap:10,marginBottom:18,flexWrap:'wrap',alignItems:'center'}}>
-      <Btn v="p" onClick={()=>window.print()}>🖨 Print / Save PDF</Btn>
-      <Btn v="ok" onClick={email}>✉️ Email</Btn>
-      <Btn v="tl" onClick={whatsapp}>💬 WhatsApp</Btn>
-      <Btn v="s" onClick={onBack}>← Back</Btn>
-      <span style={{fontSize:11,color:T.grey400,marginLeft:4}}>💡 In the print dialog, set Headers &amp; Footers to <strong>None</strong> to remove the URL and date.</span>
+    <div className="no-print" style={{marginBottom:18}}>
+      <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center',marginBottom:10}}>
+        <Btn v="p" onClick={()=>window.print()}>🖨 Save as PDF</Btn>
+        {isMobileDevice()
+          ? <Btn v="tl" onClick={share}>📤 Share Invoice</Btn>
+          : <>
+              <Btn v="ok" onClick={email}>✉️ Email</Btn>
+              <Btn v="tl" onClick={whatsapp}>💬 WhatsApp</Btn>
+            </>
+        }
+        <Btn v="s" onClick={onBack}>← Back</Btn>
+      </div>
+      <div style={{background:'#FEF3C7',border:'1px solid #FDE68A',borderRadius:8,padding:'10px 14px',fontSize:12,color:'#92400E',lineHeight:1.6}}>
+        📎 <strong>To send with the invoice attached:</strong> First tap <strong>Save as PDF</strong> above, then open your WhatsApp or email app and attach the saved PDF from your files.
+        {!isMobileDevice() && <span> In the print dialog, set <strong>Headers &amp; Footers to None</strong> to remove the URL and date.</span>}
+      </div>
     </div>
     <div className="print-doc">
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:26,paddingBottom:18,borderBottom:`3px solid ${dt.color}`}}>

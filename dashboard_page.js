@@ -464,6 +464,7 @@ function DocPrint({doc,company,onBack}){
       </div>
       <table style={{width:'100%',borderCollapse:'collapse',marginBottom:16}}>
         <thead><tr style={{background:dt.color}}>
+          <th style={{padding:'8px 8px',width:30,textAlign:'center',fontSize:11,fontWeight:700,color:'#fff',textTransform:'uppercase'}}>#</th>
           <th style={{padding:'8px 10px',textAlign:'left',fontSize:11,fontWeight:700,color:'#fff',textTransform:'uppercase'}}>Description</th>
           {hasUnit&&<th style={{padding:'8px 8px',width:55,textAlign:'center',fontSize:11,fontWeight:700,color:'#fff',textTransform:'uppercase'}}>Unit</th>}
           <th style={{padding:'8px 8px',width:45,textAlign:'right',fontSize:11,fontWeight:700,color:'#fff',textTransform:'uppercase'}}>Qty</th>
@@ -474,7 +475,8 @@ function DocPrint({doc,company,onBack}){
         </tr></thead>
         <tbody>
           {rows.map((it,i)=>(
-            <tr key={it.id} style={{background:i%2===0?'#fff':'#F8FAFC',borderBottom:`1px solid ${T.grey100}`}}>
+            <tr key={it.id} style={{background:i%2===0?'#fff':'#EEF4FF',borderBottom:`2px solid ${T.grey200}`}}>
+              <td style={{padding:'8px 8px',fontSize:11,textAlign:'center',color:T.grey400,fontWeight:700}}>{i+1}</td>
               <td style={{padding:'8px 10px',fontSize:12,whiteSpace:'pre-line'}}>{it.desc}</td>
               {hasUnit&&<td style={{padding:'8px 8px',fontSize:12,textAlign:'center',color:T.grey600}}>{it.unit}</td>}
               <td style={{padding:'8px 8px',fontSize:12,textAlign:'right'}}>{it.qty}</td>

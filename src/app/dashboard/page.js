@@ -782,7 +782,7 @@ function Companies({companies,activeCoId,onSave,onDelete,setActiveCoId}){
 }
 
 // ── Main App ──────────────────────────────────────────────────────────────────
-export default function Dashboard(){
+export default function App(){
   const [user,setUser]=useState(undefined)
   const [page,setPage]=useState('dashboard')
   const [companies,setCompanies]=useState([])

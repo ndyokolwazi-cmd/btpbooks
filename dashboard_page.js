@@ -326,7 +326,7 @@ function LineItems({items,setItems,vatReg,sym}){
           {items.map(it=>{
             const net=it.qty*it.rate*(1-(it.discount||0)/100)
             return <tr key={it.id}>
-              <td><input type="text" value={it.desc} onChange={e=>upd(it.id,'desc',e.target.value)} placeholder="Description" className="inp" style={{padding:'6px 8px'}}/></td>
+              <td><textarea value={it.desc} onChange={e=>upd(it.id,'desc',e.target.value)} placeholder="Description (press Enter for new line)" className="inp" rows={2} style={{padding:'6px 8px',resize:'vertical',minHeight:36}}/></td>
               {hasUnit&&<td><input type="text" value={it.unit} onChange={e=>upd(it.id,'unit',e.target.value)} className="inp" style={{padding:'6px 6px'}}/></td>}
               <td><input type="number" value={it.qty} onChange={e=>upd(it.id,'qty',e.target.value)} className="inp" style={{padding:'6px 6px',textAlign:'right'}}/></td>
               <td><input type="number" value={it.rate} onChange={e=>upd(it.id,'rate',e.target.value)} className="inp" style={{padding:'6px 6px',textAlign:'right'}}/></td>
@@ -435,7 +435,7 @@ function DocPrint({doc,company,onBack}){
           <div style={{fontWeight:800,fontSize:17,color:T.navy}}>{company?.name}</div>
           {company?.trading_as&&<div style={{fontSize:12,color:T.grey600}}>t/a {company.trading_as}</div>}
           <div style={{fontSize:12,color:'#374151',marginTop:4,lineHeight:1.6}}>
-            {company?.address&&<div>{company.address}</div>}
+            {company?.address&&<div style={{whiteSpace:'pre-line'}}>{company.address}</div>}
             {company?.phone&&<div>{company.phone}</div>}
             {company?.email&&<div>{company.email}</div>}
           </div>
@@ -475,7 +475,7 @@ function DocPrint({doc,company,onBack}){
         <tbody>
           {rows.map((it,i)=>(
             <tr key={it.id} style={{background:i%2===0?'#fff':'#F8FAFC',borderBottom:`1px solid ${T.grey100}`}}>
-              <td style={{padding:'8px 10px',fontSize:12}}>{it.desc}</td>
+              <td style={{padding:'8px 10px',fontSize:12,whiteSpace:'pre-line'}}>{it.desc}</td>
               {hasUnit&&<td style={{padding:'8px 8px',fontSize:12,textAlign:'center',color:T.grey600}}>{it.unit}</td>}
               <td style={{padding:'8px 8px',fontSize:12,textAlign:'right'}}>{it.qty}</td>
               <td style={{padding:'8px 8px',fontSize:12,textAlign:'right',whiteSpace:'nowrap'}}>{fmtMoney(it.rate,sym)}</td>

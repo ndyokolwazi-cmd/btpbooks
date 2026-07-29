@@ -211,7 +211,7 @@ function Sidebar({page,setPage,companies,activeCoId,setActiveCoId,user,onSignOut
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
-function Dashboard({docs,company,setPage,setNewDocType}){
+function DashboardView({docs,company,setPage,setNewDocType}){
   const my=docs.filter(d=>d.company_id===company?.id)
   const inv=my.filter(d=>d.type==='invoice')
   const sym=company?.currency_symbol||'R'
@@ -900,7 +900,7 @@ export default function Dashboard(){
   }
 
   const pages={
-    dashboard:<Dashboard docs={docs} company={company} setPage={setPage} setNewDocType={setNewDocType}/>,
+    dashboard:<DashboardView docs={docs} company={company} setPage={setPage} setNewDocType={setNewDocType}/>,
     documents:<Documents docs={docs} clients={clients} company={company} onSave={saveDoc} onDelete={deleteDoc} onStatusChange={changeStatus} initDocType={newDocType} setInitDocType={setNewDocType}/>,
     clients:<Clients clients={clients} docs={docs} company={company} onSave={saveClient} onDelete={deleteClient}/>,
     companies:<Companies companies={companies} activeCoId={activeCoId} onSave={saveCompany} onDelete={deleteCompany} setActiveCoId={setActiveCoId}/>,

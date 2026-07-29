@@ -134,7 +134,7 @@ input,select,textarea{font-family:inherit;font-size:13px;}
 .sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:49;}
 .print-doc{background:#fff;max-width:750px;margin:0 auto;padding:36px 44px;border:1px solid #E2E8F0;border-radius:8px;}
 .quick-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;}
-@media print{.no-print{display:none!important;}.sidebar,.modal-bg{display:none!important;}.main{margin-left:0!important;}body{background:#fff;}@page{margin:12mm;}}
+@media print{.no-print{display:none!important;}.sidebar,.modal-bg{display:none!important;}.main{margin-left:0!important;}body{background:#fff;}@page{margin:12mm;size:A4;}html{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
 @media(max-width:768px){
   .sidebar{transform:translateX(-230px);}
   .sidebar.open{transform:translateX(0);}
@@ -450,11 +450,12 @@ function DocPrint({doc,company,onBack}){
   }
 
   return <div>
-    <div className="no-print" style={{display:'flex',gap:10,marginBottom:18,flexWrap:'wrap'}}>
+    <div className="no-print" style={{display:'flex',gap:10,marginBottom:18,flexWrap:'wrap',alignItems:'center'}}>
       <Btn v="p" onClick={()=>window.print()}>🖨 Print / Save PDF</Btn>
       <Btn v="ok" onClick={email}>✉️ Email</Btn>
       <Btn v="tl" onClick={whatsapp}>💬 WhatsApp</Btn>
       <Btn v="s" onClick={onBack}>← Back</Btn>
+      <span style={{fontSize:11,color:T.grey400,marginLeft:4}}>💡 In the print dialog, set Headers &amp; Footers to <strong>None</strong> to remove the URL and date.</span>
     </div>
     <div className="print-doc">
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:26,paddingBottom:18,borderBottom:`3px solid ${dt.color}`}}>
@@ -481,7 +482,6 @@ function DocPrint({doc,company,onBack}){
             {doc.po_number&&<div><span style={{color:'#374151'}}>PO #: </span><strong>{doc.po_number}</strong></div>}
             {doc.ref&&<div><span style={{color:'#374151'}}>Ref: </span><strong>{doc.ref}</strong></div>}
           </div>
-          <span className="badge" style={{marginTop:8,display:'inline-block',background:sc.bg,color:sc.fg}}>{doc.status}</span>
         </div>
       </div>
       <div style={{marginBottom:22,padding:'12px 14px',background:T.grey50,borderRadius:8,borderLeft:`3px solid ${dt.color}`,maxWidth:270}}>

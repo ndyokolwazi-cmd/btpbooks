@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase } from '../../lib/supabase'
 
 const T = {
   navy:'#0D1F3C',blue:'#1E6FD9',blueLt:'#E8F1FB',

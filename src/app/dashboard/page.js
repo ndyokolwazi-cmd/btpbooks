@@ -232,6 +232,7 @@ function Sidebar({page,setPage,companies,activeCoId,setActiveCoId,user,onSignOut
       <div className="sb-foot">
         <div style={{marginBottom:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{user?.email}</div>
         {co?.vat_registered&&co?.vat&&<div>VAT: {co.vat}</div>}
+          {user?.email==='lwazi@betheproject.co.za'&&<a href="/admin" style={{display:'block',marginTop:8,color:'rgba(255,255,255,.7)',fontSize:11,textDecoration:'none'}}>⚙ Admin Panel</a>}
         <button style={{marginTop:8,background:'rgba(255,255,255,.1)',color:'rgba(255,255,255,.7)',border:'none',padding:'5px 12px',borderRadius:6,fontSize:11,cursor:'pointer'}} onClick={onSignOut}>Sign Out</button>
       </div>
     </div>

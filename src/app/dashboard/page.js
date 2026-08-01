@@ -403,13 +403,12 @@ const QUOTE_TC = `1. VALIDITY: This quotation is valid for 30 days from the date
 // ── Doc Form ───────────────────────────────────────────────────────────────────
 function DocForm({doc,company,clients,docType,onSave,onClose,onConvertQuote}){
   const dt=DT[docType]||DT.invoice
-  const nextNo=company?.next_nos?.[docType]||1
   const defaultTerms = docType==='invoice'
     ? 'Payment due within 30 days. EFT preferred. Overdue accounts attract interest at 2% per month.'
     : docType==='quote'
     ? QUOTE_TC.replace('${\'company\'}', company?.name||'the service provider')
     : ''
-  const blank={number:`${dt.prefix}-${nextNo}`,status:'Draft',date:today(),due:docType==='invoice'?addDays(today(),30):docType==='quote'?addDays(today(),30):today(),client_id:'',client_name:'',client_address:'',client_vat:'',po_number:'',ref:'',notes:'',terms:defaultTerms}
+  const blank={number:'',status:'Draft',date:today(),due:docType==='invoice'?addDays(today(),30):docType==='quote'?addDays(today(),30):today(),client_id:'',client_name:'',client_address:'',client_vat:'',po_number:'',ref:'',notes:'',terms:defaultTerms}
   const [f,setF]=useState(doc||blank)
   const [items,setItems]=useState(doc?.items||[{id:uid(),desc:'',qty:1,unit:'',rate:0,vatRate:company?.vat_registered?15:0,discount:0}])
   const set=(k,v)=>setF(p=>({...p,[k]:v}))
@@ -922,13 +921,17 @@ export default function Dashboard(){
     const co=company;const isNew=!doc.id
     const payload={user_id:user.id,company_id:doc.company_id,type:doc.type,number:doc.number,status:doc.status,date:doc.date,due:doc.due||null,client_id:doc.client_id||null,client_name:doc.client_name,client_address:doc.client_address||'',client_vat:doc.client_vat||'',po_number:doc.po_number||'',ref:doc.ref||'',items:doc.items,notes:doc.notes||'',terms:doc.terms||'',totals:doc.totals,linked_to:doc.linked_to||null}
     if(isNew){
-      const {data,error}=await supabase.from('documents').insert(payload).select().single()
-      if(error){notify('Error: '+error.message);return}
-      setDocs(d=>[data,...d])
-      const newNos={...(co.next_nos||{}),[doc.type]:((co.next_nos||{})[doc.type]||1)+1}
-      await supabase.from('companies').update({next_nos:newNos}).eq('id',co.id)
-      setCompanies(c=>c.map(x=>x.id===co.id?{...x,next_nos:newNos}:x))
-    }else{
+        if(!payload.number?.trim()){
+          const {data:seq,error:seqErr}=await supabase.rpc('next_document_number',{
+            p_company:doc.company_id, p_type:doc.type,
+          })
+          if(seqErr){notify('Could not assign number: '+seqErr.message);return}
+          payload.number=`${DT[doc.type]?.prefix||'DOC'}-${seq}`
+        }
+        const {data,error}=await supabase.from('documents').insert(payload).select().single()
+        if(error){notify('Error: '+error.message);return}
+        setDocs(d=>[data,...d])
+      }else{
       const {data,error}=await supabase.from('documents').update(payload).eq('id',doc.id).select().single()
       if(error){notify('Error: '+error.message);return}
       setDocs(d=>d.map(x=>x.id===doc.id?data:x))

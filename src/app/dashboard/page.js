@@ -134,7 +134,7 @@ input,select,textarea{font-family:inherit;font-size:13px;}
 .sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:49;}
 .print-doc{background:#fff;max-width:750px;margin:0 auto;padding:36px 44px;border:1px solid #E2E8F0;border-radius:8px;}
 .quick-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;}
-@media print{.no-print{display:none!important;}.sidebar,.modal-bg{display:none!important;}.main{margin-left:0!important;}body{background:#fff;}@page{margin:12mm;size:A4;}html{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
+@media print{.no-print{display:none!important;}.sidebar,.modal-bg{display:none!important;}.main{margin-left:0!important;}body{background:#fff;}@page{margin:10mm;size:A4;}html{-webkit-print-color-adjust:exact;print-color-adjust:exact;}.print-doc{padding:0!important;border:none!important;max-width:100%!important;}.print-doc table{page-break-inside:auto;}.print-doc tr{page-break-inside:avoid;}.print-doc thead{display:table-header-group;}}
 @media(max-width:768px){
   .sidebar{transform:translateX(-230px);}
   .sidebar.open{transform:translateX(0);}

@@ -880,12 +880,19 @@ export default function Dashboard(){
   },[])
 
   useEffect(()=>{
+    let currentUserId=null
     supabase.auth.getSession().then(({data:{session}})=>{
       if(!session?.user){window.location.href='/';return}
+      currentUserId=session.user.id
       setUser(session.user);loadAll(session.user)
     })
-    const {data:{subscription}}=supabase.auth.onAuthStateChange((_,session)=>{
-      if(!session?.user){window.location.href='/';return}
+    const {data:{subscription}}=supabase.auth.onAuthStateChange((event,session)=>{
+      if(event==='SIGNED_OUT'||!session?.user){window.location.href='/';return}
+      if(event==='TOKEN_REFRESHED'||event==='INITIAL_SESSION'||event==='USER_UPDATED'){
+        setUser(session.user);return
+      }
+      if(session.user.id===currentUserId){setUser(session.user);return}
+      currentUserId=session.user.id
       setUser(session.user);loadAll(session.user)
     })
     return()=>subscription.unsubscribe()

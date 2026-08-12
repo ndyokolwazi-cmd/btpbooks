@@ -521,7 +521,10 @@ function DocPrint({doc,company,onBack}){
         </div>
         <div style={{textAlign:'right'}}>
           <div style={{fontSize:26,fontWeight:900,color:dt.color,textTransform:'uppercase',letterSpacing:'-.5px'}}>{dt.label}</div>
-          <div style={{fontSize:16,fontWeight:800,color:T.navy,marginTop:3}}>{doc.number}</div>
+          <div style={{fontSize:16,fontWeight:800,color:T.navy,marginTop:3,display:'flex',alignItems:'center',justifyContent:'flex-end',gap:8}}>
+            <span>{doc.number}</span>
+            {doc.type==='receipt'&&<span style={{display:'inline-flex',alignItems:'center',gap:4,border:`1.5px solid ${T.green}`,borderRadius:20,padding:'2px 10px',fontSize:11,fontWeight:800,color:T.green,textTransform:'uppercase',letterSpacing:'.4px',whiteSpace:'nowrap'}}>✓ Paid in Full</span>}
+          </div>
           <div style={{fontSize:12,color:'#374151',marginTop:10,lineHeight:1.8}}>
             <div><span style={{color:'#374151'}}>Date: </span><strong>{fmtDate(doc.date)}</strong></div>
             {doc.due&&<div><span style={{color:'#374151'}}>{doc.type==='quote'?'Valid Until: ':'Due: '}</span><strong style={{color:doc.status==='Overdue'?T.red:T.grey800}}>{fmtDate(doc.due)}</strong></div>}
@@ -569,7 +572,7 @@ function DocPrint({doc,company,onBack}){
             <div style={{display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:`1px solid ${T.grey100}`,fontSize:12}}><span style={{color:T.grey600}}>VAT (15%)</span><span>{fmtMoney(tot.vat,sym)}</span></div>
           </>}
           <div style={{display:'flex',justifyContent:'space-between',padding:'9px 10px',marginTop:4,background:dt.color,borderRadius:6}}>
-            <span style={{fontSize:13,fontWeight:800,color:'#fff'}}>TOTAL{vatReg?' DUE':' DUE (VAT Incl.)'}</span>
+            <span style={{fontSize:13,fontWeight:800,color:'#fff'}}>{doc.type==='receipt'?'AMOUNT PAID':`TOTAL${vatReg?' DUE':' DUE (VAT Incl.)'}`}</span>
             <span style={{fontSize:13,fontWeight:900,color:'#fff',whiteSpace:'nowrap'}}>{fmtMoney(tot.total,sym)}</span>
           </div>
         </div>

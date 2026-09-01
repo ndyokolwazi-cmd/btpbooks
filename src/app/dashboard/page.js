@@ -34,6 +34,10 @@ const DST = {
 const uid=()=>Math.random().toString(36).slice(2,10)
 const today=()=>new Date().toISOString().slice(0,10)
 const addDays=(d,n)=>{const dt=new Date(d);dt.setDate(dt.getDate()+n);return dt.toISOString().slice(0,10)}
+const addMonths=(d,n)=>{const dt=new Date(d);dt.setMonth(dt.getMonth()+n);return dt.toISOString().slice(0,10)}
+const addYears=(d,n)=>{const dt=new Date(d);dt.setFullYear(dt.getFullYear()+n);return dt.toISOString().slice(0,10)}
+const advance=(d,freq)=>freq==='weekly'?addDays(d,7):freq==='quarterly'?addMonths(d,3):freq==='yearly'?addYears(d,1):addMonths(d,1)
+const FREQUENCIES=[{v:'weekly',l:'Weekly'},{v:'monthly',l:'Monthly'},{v:'quarterly',l:'Quarterly'},{v:'yearly',l:'Yearly'}]
 const fmtDate=d=>d?new Date(d+'T00:00:00').toLocaleDateString('en-ZA',{day:'2-digit',month:'short',year:'numeric'}):''
 const fmtMoney=(n,sym='R')=>`${sym} ${Number(n||0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,',')}`
 const calcTotals=(items,vr)=>{let s=0,v=0;items.forEach(it=>{const n=it.qty*it.rate*(1-(it.discount||0)/100);s+=n;if(vr)v+=n*(it.vatRate||0)/100});return{subtotal:s,vat:v,total:s+v}}
@@ -105,7 +109,7 @@ input,select,textarea{font-family:inherit;font-size:13px;}
 .tbl th{padding:10px 14px;text-align:left;font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.4px;background:#F8FAFC;white-space:nowrap;border-bottom:2px solid #E2E8F0;}
 .tbl td{padding:11px 14px;font-size:13px;border-top:1px solid #F1F4F8;}
 .badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap;}
-.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:24px 12px;overflow-y:auto;}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:24px 12px;overflow-y:auto;-webkit-overflow-scrolling:touch;}
 .modal{background:#fff;border-radius:14px;width:100%;max-width:660px;box-shadow:0 20px 70px rgba(0,0,0,.25);margin-bottom:24px;}
 .modal-lg{max-width:860px;}
 .modal-hd{display:flex;justify-content:space-between;align-items:center;padding:16px 22px;border-bottom:1px solid #E2E8F0;}
@@ -148,8 +152,8 @@ input,select,textarea{font-family:inherit;font-size:13px;}
   .stat-grid{grid-template-columns:1fr 1fr;}
   .tbl th,.tbl td{padding:8px 10px;font-size:12px;}
   .modal{max-width:100%;margin:0;}
-  .modal-bg{padding:8px;align-items:flex-end;}
-  .modal{border-radius:14px 14px 0 0;max-height:90vh;overflow-y:auto;}
+  .modal-bg{padding:8px;align-items:flex-end;overflow-y:hidden;}
+  .modal{border-radius:14px 14px 0 0;max-height:90vh;max-height:90dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;}
   .print-doc{padding:20px 16px;}
   .topbar{padding:10px 14px;}
   .card,.card0{border-radius:10px;}
@@ -451,6 +455,8 @@ function DocForm({doc,company,clients,docType,onSave,onClose,onConvertQuote}){
 
 // ── Print Preview ─────────────────────────────────────────────────────────────
 function DocPrint({doc,company,onBack}){
+  const printRef=useRef(null)
+  const [generating,setGenerating]=useState(false)
   const ac=coColor(company)
   const dt={...DT[doc.type]||DT.invoice,color:doc.type==='invoice'?ac:DT[doc.type]?.color||T.navy}
   const sym=company?.currency_symbol||'R'
@@ -484,11 +490,39 @@ function DocPrint({doc,company,onBack}){
     }
   }
   const isMobileDevice=()=>typeof navigator!=='undefined'&&/iPhone|iPad|Android|Mobile/i.test(navigator.userAgent)
+  const downloadPdf=async()=>{
+    if(!printRef.current||generating)return
+    setGenerating(true)
+    try{
+      const [{default:jsPDF},{default:html2canvas}]=await Promise.all([import('jspdf'),import('html2canvas')])
+      const canvas=await html2canvas(printRef.current,{scale:2,useCORS:true,backgroundColor:'#ffffff'})
+      const imgData=canvas.toDataURL('image/png')
+      const pdf=new jsPDF({unit:'mm',format:'a4'})
+      const pageW=210,pageH=297,margin=8
+      const imgW=pageW-margin*2
+      const imgH=canvas.height*imgW/canvas.width
+      const contentH=pageH-margin*2
+      pdf.addImage(imgData,'PNG',margin,margin,imgW,imgH)
+      let heightLeft=imgH-contentH,page=1
+      while(heightLeft>0){
+        pdf.addPage()
+        pdf.addImage(imgData,'PNG',margin,margin-contentH*page,imgW,imgH)
+        heightLeft-=contentH;page++
+      }
+      const safeNumber=(doc.number||'document').replace(/[^a-z0-9-_]/gi,'_')
+      pdf.save(`${dt.label.replace(/\s+/g,'-')}-${safeNumber}.pdf`)
+    }catch(e){
+      alert('Could not generate PDF: '+e.message)
+    }finally{
+      setGenerating(false)
+    }
+  }
 
   return <div>
     <div className="no-print" style={{marginBottom:18}}>
       <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center',marginBottom:10}}>
-        <Btn v="p" onClick={()=>window.print()}>🖨 Save as PDF</Btn>
+        <Btn v="p" onClick={()=>window.print()}>🖨 Print</Btn>
+        <Btn v="ok" onClick={downloadPdf} disabled={generating}>{generating?'Generating…':'⬇ Download PDF'}</Btn>
         {isMobileDevice()
           ? <Btn v="tl" onClick={share}>📤 Share Invoice</Btn>
           : <>
@@ -499,11 +533,10 @@ function DocPrint({doc,company,onBack}){
         <Btn v="s" onClick={onBack}>← Back</Btn>
       </div>
       <div style={{background:'#FEF3C7',border:'1px solid #FDE68A',borderRadius:8,padding:'10px 14px',fontSize:12,color:'#92400E',lineHeight:1.6}}>
-        📎 <strong>To send with the invoice attached:</strong> First tap <strong>Save as PDF</strong> above, then open your WhatsApp or email app and attach the saved PDF from your files.
-        {!isMobileDevice() && <span> In the print dialog, set <strong>Headers &amp; Footers to None</strong> to remove the URL and date.</span>}
+        📎 <strong>To send with the invoice attached:</strong> First tap <strong>Download PDF</strong> above, then open your WhatsApp or email app and attach the downloaded file.
       </div>
     </div>
-    <div className="print-doc">
+    <div className="print-doc" ref={printRef}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:26,paddingBottom:18,borderBottom:`3px solid ${dt.color}`}}>
         <div style={{maxWidth:260}}>
           {company?.logo&&<img src={company.logo} alt="" style={{maxHeight:90,maxWidth:220,objectFit:'contain',marginBottom:10,display:'block'}}/>}
@@ -609,16 +642,22 @@ function DocPrint({doc,company,onBack}){
 }
 
 // ── Documents ──────────────────────────────────────────────────────────────────
-function Documents({docs,clients,company,onSave,onDelete,onStatusChange,initDocType,setInitDocType}){
+function Documents({docs,clients,company,onSave,onDelete,onStatusChange,initDocType,setInitDocType,recurring,onSaveRecurring,onToggleRecurring,onDeleteRecurring}){
+  const [tab,setTab]=useState('all')
   const [typeF,setTypeF]=useState(initDocType||'all')
   const [statF,setStatF]=useState('all')
   const [search,setSearch]=useState('')
   const [editing,setEditing]=useState(null)
   const [newType,setNewType]=useState(initDocType||null)
   const [preview,setPreview]=useState(null)
+  const [recurSetup,setRecurSetup]=useState(null)
+  const [recurFreq,setRecurFreq]=useState('monthly')
+  const [recurStart,setRecurStart]=useState(today())
   const ac=coColor(company)
   useEffect(()=>{if(initDocType){setNewType(initDocType);setTypeF(initDocType);setInitDocType(null)}},[initDocType])
+  useEffect(()=>{if(recurSetup){setRecurFreq('monthly');setRecurStart(advance(recurSetup.date,'monthly'))}},[recurSetup])
   const my=docs.filter(d=>d.company_id===company?.id)
+  const myRecurring=(recurring||[]).filter(r=>r.company_id===company?.id)
   const sym=company?.currency_symbol||'R'
   const filtered=my.filter(d=>{
     if(typeF!=='all'&&d.type!==typeF)return false
@@ -633,6 +672,15 @@ function Documents({docs,clients,company,onSave,onDelete,onStatusChange,initDocT
     onSave({...quote,id:undefined,type:'invoice',number:`INV-${nextNo}`,status:'Draft',date:today(),due:addDays(today(),30),linked_to:quote.id})
     setEditing(null);setNewType(null)
   }
+  const confirmRecurring=()=>{
+    const doc=recurSetup
+    const dueDays=doc.due?Math.round((new Date(doc.due)-new Date(doc.date))/86400000):null
+    onSaveRecurring({
+      company_id:doc.company_id,client_id:doc.client_id||null,frequency:recurFreq,next_run:recurStart,active:true,
+      template:{client_id:doc.client_id||null,client_name:doc.client_name,client_address:doc.client_address||'',client_vat:doc.client_vat||'',po_number:doc.po_number||'',ref:doc.ref||'',items:doc.items,notes:doc.notes||'',terms:doc.terms||'',totals:doc.totals,due_days:dueDays},
+    })
+    setRecurSetup(null)
+  }
   if(preview)return <DocPrint doc={preview} company={company} onBack={()=>setPreview(null)}/>
   const chipColor=type=>type==='invoice'?ac:DT[type]?.color||T.navy
   return <div>
@@ -641,12 +689,28 @@ function Documents({docs,clients,company,onSave,onDelete,onStatusChange,initDocT
         <DocForm doc={editing} company={company} clients={clients} docType={editing?editing.type:newType} onSave={handleSave} onClose={()=>{setNewType(null);setEditing(null)}} onConvertQuote={convertQuote}/>
       </Modal>
     )}
+    {recurSetup&&(
+      <Modal title={`Make ${recurSetup.number} Recurring`} onClose={()=>setRecurSetup(null)}>
+        <p style={{fontSize:13,color:T.grey600,marginBottom:16}}>A new Draft invoice will be generated automatically from this one on the schedule below, each time you have the dashboard open on or after the due date.</p>
+        <div className="field"><Lbl text="Frequency"/><Sel value={recurFreq} onChange={v=>{setRecurFreq(v);setRecurStart(advance(recurSetup.date,v))}} options={FREQUENCIES}/></div>
+        <div className="field"><Lbl text="First Generation Date"/><Inp value={recurStart} onChange={setRecurStart} type="date"/></div>
+        <div style={{display:'flex',gap:10,justifyContent:'flex-end',paddingTop:12,borderTop:`1px solid ${T.grey200}`}}>
+          <Btn v="s" onClick={()=>setRecurSetup(null)}>Cancel</Btn>
+          <Btn v="p" onClick={confirmRecurring}>Schedule</Btn>
+        </div>
+      </Modal>
+    )}
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:20,flexWrap:'wrap',gap:10}}>
       <div><h1 style={{fontSize:24,fontWeight:900,color:T.navy}}>Documents</h1><p style={{fontSize:13,color:T.grey600}}>{company?.name}</p></div>
       <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>
         {DOC_TYPES.map(t=><Btn key={t.key} v="s" sz="sm" onClick={()=>setNewType(t.key)}>+ {t.label}</Btn>)}
       </div>
     </div>
+    <div style={{display:'flex',gap:7,marginBottom:16}}>
+      <Btn v={tab==='all'?'p':'s'} sz="sm" onClick={()=>setTab('all')}>All Documents</Btn>
+      <Btn v={tab==='recurring'?'p':'s'} sz="sm" onClick={()=>setTab('recurring')}>🔁 Recurring{myRecurring.length?` (${myRecurring.length})`:''}</Btn>
+    </div>
+    {tab==='all'?<>
     <div className="filter-bar">
       <input type="text" placeholder="Search # or client…" value={search} onChange={e=>setSearch(e.target.value)} style={{width:180}}/>
       <select value={typeF} onChange={e=>setTypeF(e.target.value)}>
@@ -676,6 +740,7 @@ function Documents({docs,clients,company,onSave,onDelete,onStatusChange,initDocT
                 <td><div style={{display:'flex',gap:5}}>
                   <Btn v="gh" sz="sm" onClick={()=>setPreview(d)}>👁</Btn>
                   <Btn v="s" sz="sm" onClick={()=>setEditing(d)}>Edit</Btn>
+                  {d.type==='invoice'&&<Btn v="tl" sz="sm" onClick={()=>setRecurSetup(d)}>🔁</Btn>}
                   <Btn v="d" sz="sm" onClick={()=>confirm('Delete?')&&onDelete(d.id)}>✕</Btn>
                 </div></td>
               </tr>
@@ -684,6 +749,30 @@ function Documents({docs,clients,company,onSave,onDelete,onStatusChange,initDocT
         </table>
       </div>
     </div>
+    </>:
+    <div className="card0">
+      <div style={{overflowX:'auto'}}>
+        <table className="tbl">
+          <thead><tr><th>Client</th><th>Frequency</th><th>Next Invoice</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>
+            {!myRecurring.length&&<tr><td colSpan={5} style={{textAlign:'center',color:T.grey400,padding:36}}>No recurring invoices yet. Use the 🔁 button on an invoice to schedule one.</td></tr>}
+            {myRecurring.map(r=>(
+              <tr key={r.id}>
+                <td style={{fontWeight:700,color:T.navy}}>{r.template?.client_name}</td>
+                <td>{FREQUENCIES.find(f=>f.v===r.frequency)?.l||r.frequency}</td>
+                <td style={{color:T.grey600,whiteSpace:'nowrap'}}>{fmtDate(r.next_run)}</td>
+                <td><span className="badge" style={r.active?{background:SM.Sent.bg,color:SM.Sent.fg}:{background:T.grey100,color:T.grey600}}>{r.active?'Active':'Paused'}</span></td>
+                <td><div style={{display:'flex',gap:5}}>
+                  <Btn v="s" sz="sm" onClick={()=>onToggleRecurring(r.id,!r.active)}>{r.active?'Pause':'Resume'}</Btn>
+                  <Btn v="d" sz="sm" onClick={()=>confirm('Delete this recurring schedule?')&&onDeleteRecurring(r.id)}>✕</Btn>
+                </div></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    }
   </div>
 }
 
@@ -860,6 +949,29 @@ function Companies({companies,activeCoId,onSave,onDelete,setActiveCoId}){
   </div>
 }
 
+// Generate any invoices whose recurring schedule is due. Pure Supabase calls —
+// no React state here; the caller merges the results into component state.
+async function generateDueRecurring(u,recList){
+  const due=(recList||[]).filter(r=>r.active&&r.next_run<=today())
+  const newDocs=[],updated=[]
+  for(const r of due){
+    try{
+      const {data:seq,error:seqErr}=await supabase.rpc('next_document_number',{p_company:r.company_id,p_type:'invoice'})
+      if(seqErr)throw seqErr
+      const t=r.template||{}
+      const payload={user_id:u.id,company_id:r.company_id,type:'invoice',number:`${DT.invoice.prefix}-${seq}`,status:'Draft',date:today(),due:t.due_days!=null?addDays(today(),t.due_days):null,client_id:t.client_id||null,client_name:t.client_name||'',client_address:t.client_address||'',client_vat:t.client_vat||'',po_number:t.po_number||'',ref:t.ref||'',items:t.items||[],notes:t.notes||'',terms:t.terms||'',totals:t.totals||calcTotals(t.items||[],false),linked_to:null}
+      const {data:doc,error:insErr}=await supabase.from('documents').insert(payload).select().single()
+      if(insErr)throw insErr
+      newDocs.push(doc)
+      const {data:updRow,error:updErr}=await supabase.from('recurring_invoices').update({next_run:advance(r.next_run,r.frequency),last_generated_at:new Date().toISOString()}).eq('id',r.id).select().single()
+      updated.push(updErr?{...r,next_run:advance(r.next_run,r.frequency)}:updRow)
+    }catch(e){
+      console.error('Recurring invoice generation failed for schedule',r.id,e)
+    }
+  }
+  return {newDocs,updated}
+}
+
 // ── Main App ──────────────────────────────────────────────────────────────────
 export default function Dashboard(){
   const [user,setUser]=useState(undefined)
@@ -867,6 +979,7 @@ export default function Dashboard(){
   const [companies,setCompanies]=useState([])
   const [clients,setClients]=useState([])
   const [docs,setDocs]=useState([])
+  const [recurring,setRecurring]=useState([])
   const [activeCoId,setActiveCoId]=useState(null)
   const [toast,setToast]=useState(null)
   const [loading,setLoading]=useState(true)
@@ -902,17 +1015,30 @@ export default function Dashboard(){
 
   const loadAll=async(u)=>{
     setLoading(true)
-    const [cos,cls,ds,sub]=await Promise.all([
+    const [cos,cls,ds,sub,rec]=await Promise.all([
       supabase.from('companies').select('*').eq('user_id',u.id).order('created_at'),
       supabase.from('clients').select('*').eq('user_id',u.id).order('name'),
       supabase.from('documents').select('*').eq('user_id',u.id).order('created_at',{ascending:false}),
       supabase.from('subscriptions').select('*').eq('user_id',u.id).single(),
+      supabase.from('recurring_invoices').select('*').eq('user_id',u.id).order('created_at',{ascending:false}),
     ])
     const coList=cos.data||[]
     setCompanies(coList);setClients(cls.data||[]);setDocs(ds.data||[])
     setSubscription(sub.data||null)
     if(coList.length)setActiveCoId(coList[0].id)
+    const recList=rec.data||[]
+    setRecurring(recList)
     setLoading(false)
+    // Client-triggered recurring generation: there's no server/cron in this app,
+    // so due schedules are generated whenever someone loads the dashboard.
+    if(recList.some(r=>r.active&&r.next_run<=today())){
+      const {newDocs,updated}=await generateDueRecurring(u,recList)
+      if(newDocs.length){
+        setDocs(d=>[...newDocs,...d])
+        setRecurring(r=>r.map(x=>updated.find(y=>y.id===x.id)||x))
+        setToast(`Generated ${newDocs.length} recurring invoice${newDocs.length!==1?'s':''}`)
+      }
+    }
   }
 
   const notify=msg=>setToast(msg)
@@ -959,6 +1085,20 @@ export default function Dashboard(){
     notify('Company saved')
   }
   const deleteCompany=async(id)=>{await supabase.from('companies').delete().eq('id',id);const r=companies.filter(c=>c.id!==id);setCompanies(r);if(activeCoId===id)setActiveCoId(r[0]?.id)}
+  const saveRecurring=async(payload)=>{
+    const {data,error}=await supabase.from('recurring_invoices').insert({...payload,user_id:user.id}).select().single()
+    if(error){notify('Error: '+error.message);return}
+    setRecurring(r=>[data,...r]);notify('Recurring invoice scheduled')
+  }
+  const toggleRecurring=async(id,active)=>{
+    const {data,error}=await supabase.from('recurring_invoices').update({active}).eq('id',id).select().single()
+    if(error){notify('Error: '+error.message);return}
+    setRecurring(r=>r.map(x=>x.id===id?data:x))
+  }
+  const deleteRecurring=async(id)=>{
+    await supabase.from('recurring_invoices').delete().eq('id',id)
+    setRecurring(r=>r.filter(x=>x.id!==id));notify('Recurring schedule deleted')
+  }
 
   if(user===undefined||loading)return <div className="loading"><div className="spinner"/><span style={{color:T.grey400}}>Loading Invoxa…</span></div>
 
@@ -993,7 +1133,7 @@ export default function Dashboard(){
 
   const pages={
     dashboard:<DashboardView docs={docs} company={company} setPage={setPage} setNewDocType={setNewDocType}/>,
-    documents:<Documents docs={docs} clients={clients} company={company} onSave={saveDoc} onDelete={deleteDoc} onStatusChange={changeStatus} initDocType={newDocType} setInitDocType={setNewDocType}/>,
+    documents:<Documents docs={docs} clients={clients} company={company} onSave={saveDoc} onDelete={deleteDoc} onStatusChange={changeStatus} initDocType={newDocType} setInitDocType={setNewDocType} recurring={recurring} onSaveRecurring={saveRecurring} onToggleRecurring={toggleRecurring} onDeleteRecurring={deleteRecurring}/>,
     clients:<Clients clients={clients} docs={docs} company={company} onSave={saveClient} onDelete={deleteClient}/>,
     companies:<Companies companies={companies} activeCoId={activeCoId} onSave={saveCompany} onDelete={deleteCompany} setActiveCoId={setActiveCoId}/>,
   }

@@ -81,3 +81,24 @@ $$ language plpgsql;
 
 create trigger documents_updated_at before update on documents
 for each row execute function update_updated_at();
+
+-- NOTE: this file is not fully in sync with production — see CLAUDE.md.
+-- The table below (added for recurring invoices) has NOT been applied to
+-- production yet; run it manually via the Supabase SQL Editor.
+create table recurring_invoices (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid references auth.users(id) on delete cascade not null,
+  company_id uuid references companies(id) on delete cascade not null,
+  client_id uuid references clients(id) on delete set null,
+  -- Snapshot of the source invoice's client/line-item/notes fields, plus
+  -- due_days (gap between date and due on the source invoice) so each
+  -- generated invoice gets a fresh date/due computed at generation time.
+  template jsonb not null,
+  frequency text not null default 'monthly', -- 'weekly' | 'monthly' | 'quarterly' | 'yearly'
+  next_run date not null,
+  last_generated_at timestamptz,
+  active boolean default true,
+  created_at timestamptz default now()
+);
+alter table recurring_invoices enable row level security;
+create policy "Users see own recurring_invoices" on recurring_invoices for all using (auth.uid() = user_id);

@@ -538,8 +538,8 @@ function DocPrint({doc,company,onBack}){
     </div>
     <div className="print-doc" ref={printRef}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:26,paddingBottom:18,borderBottom:`3px solid ${dt.color}`}}>
-        <div style={{maxWidth:260}}>
-          {company?.logo&&<img src={company.logo} alt="" style={{maxHeight:90,maxWidth:220,objectFit:'contain',marginBottom:10,display:'block'}}/>}
+        <div style={{maxWidth:300}}>
+          {company?.logo&&<img src={company.logo} alt="" style={{maxHeight:200,maxWidth:300,objectFit:'contain',objectPosition:'left',marginBottom:14,display:'block'}}/>}
           <div style={{fontWeight:800,fontSize:17,color:T.navy}}>{company?.name}</div>
           {company?.trading_as&&<div style={{fontSize:12,color:T.grey600}}>t/a {company.trading_as}</div>}
           <div style={{fontSize:12,color:'#374151',marginTop:4,lineHeight:1.6}}>

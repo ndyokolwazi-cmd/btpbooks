@@ -18,6 +18,7 @@ const DOC_TYPES = [
   {key:'receipt',label:'Receipt',prefix:'REC',color:T.green},
 ]
 const DT = Object.fromEntries(DOC_TYPES.map(t=>[t.key,t]))
+const docLabel=(type,company)=>type==='invoice'&&!company?.vat_registered?'Invoice':DT[type]?.label||'Document'
 const SM = {
   Draft:{bg:T.grey100,fg:T.grey600},Sent:{bg:T.blueLt,fg:T.blue},
   Accepted:{bg:T.greenLt,fg:T.green},Paid:{bg:T.greenLt,fg:T.green},
@@ -136,13 +137,16 @@ input,select,textarea{font-family:inherit;font-size:13px;}
 @keyframes spin{to{transform:rotate(360deg);}}
 .mob-toggle{display:none;background:none;border:none;font-size:22px;color:#0D1F3C;cursor:pointer;}
 .sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:49;}
-.print-doc{background:#fff;max-width:750px;margin:0 auto;padding:36px 44px;border:1px solid #E2E8F0;border-radius:8px;}
+.print-doc{position:relative;background:#fff;max-width:750px;margin:0 auto;padding:36px 44px;border:1px solid #E2E8F0;border-radius:8px;overflow:hidden;}
 .quick-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;}
+.mobile-nav,.mobile-doc-list{display:none;}
+.draft-watermark{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:0;pointer-events:none;font-size:86px;font-weight:900;letter-spacing:12px;color:rgba(148,163,184,.14);transform:rotate(-28deg);}
+.print-doc>*:not(.draft-watermark){position:relative;z-index:1;}
 @media print{.no-print{display:none!important;}.sidebar,.modal-bg{display:none!important;}.main{margin-left:0!important;}body{background:#fff;}@page{margin:10mm;size:A4;}html{-webkit-print-color-adjust:exact;print-color-adjust:exact;}.print-doc{padding:0!important;border:none!important;max-width:100%!important;}.print-doc table{page-break-inside:auto;}.print-doc tr{page-break-inside:avoid;}.print-doc thead{display:table-header-group;}}
 @media(max-width:768px){
   .sidebar{transform:translateX(-230px);}
   .sidebar.open{transform:translateX(0);}
-  .main{margin-left:0;}
+  .main{margin-left:0;padding-bottom:82px;}
   .mob-toggle{display:block;}
   .sb-overlay.show{display:block;}
   .g2{grid-template-columns:1fr;}
@@ -164,6 +168,20 @@ input,select,textarea{font-family:inherit;font-size:13px;}
   .stat-grid .stat-val{font-size:18px!important;}
   table{font-size:12px;}
   .cl-grid,.co-grid{grid-template-columns:1fr;}
+  .desktop-doc-table{display:none;}
+  .mobile-doc-list{display:grid;gap:10px;}
+  .mobile-doc-card{background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:14px;}
+  .mobile-doc-actions{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-top:12px;padding-top:12px;border-top:1px solid #E2E8F0;}
+  .mobile-doc-actions .btn{justify-content:center;}
+  .mobile-nav{position:fixed;display:grid;grid-template-columns:repeat(5,1fr);left:0;right:0;bottom:0;z-index:80;background:#fff;border-top:1px solid #E2E8F0;padding:7px 6px calc(7px + env(safe-area-inset-bottom));box-shadow:0 -8px 24px rgba(15,23,42,.08);}
+  .mobile-nav button{border:0;background:transparent;color:#64748B;font-size:10px;font-weight:700;padding:4px 2px;display:flex;flex-direction:column;align-items:center;gap:3px;}
+  .mobile-nav button.active{color:#1E6FD9;}
+  .mobile-nav .new-action{width:46px;height:46px;border-radius:15px;background:#1E6FD9;color:#fff;margin:-20px auto 0;box-shadow:0 7px 18px rgba(30,111,217,.35);justify-content:center;font-size:20px;}
+  .mobile-nav .new-label{font-size:10px;color:#1E6FD9;margin-top:2px;}
+  .doc-create-actions{display:none!important;}
+  .filter-bar{display:grid;grid-template-columns:1fr 1fr;}
+  .filter-bar input{grid-column:1/-1;width:100%!important;}
+  .filter-bar select{width:100%;}
 }
 @media(max-width:400px){
   .stat-grid{grid-template-columns:1fr;}
@@ -199,6 +217,17 @@ function Toast({msg,onDone}){
   return <div className="toast">✓ {msg}</div>
 }
 
+function MobileNav({page,setPage,onNew}){
+  const item=(id,icon,label)=><button className={page===id?'active':''} onClick={()=>setPage(id)}><span style={{fontSize:18}}>{icon}</span>{label}</button>
+  return <nav className="mobile-nav no-print" aria-label="Mobile navigation">
+    {item('dashboard','⌂','Home')}
+    {item('documents','▤','Documents')}
+    <button onClick={onNew} aria-label="Create a new invoice"><span className="new-action">＋</span><span className="new-label">New</span></button>
+    {item('clients','♟','Clients')}
+    {item('companies','•••','More')}
+  </nav>
+}
+
 // Get company accent colour
 const coColor=(co)=>co?.accent_color||T.navy
 
@@ -212,7 +241,7 @@ function Sidebar({page,setPage,companies,activeCoId,setActiveCoId,user,onSignOut
     <div className={`sb-overlay${open?' show':''}`} onClick={()=>setOpen(false)}/>
     <div className={`sidebar${open?' open':''}`}>
       <div className="sb-brand">
-        <h1>Inv<span>o</span>xa</h1>
+        <h1>My<span>Invox</span></h1>
         <p>Business Document Manager</p>
       </div>
       <div className="sb-sec">
@@ -249,7 +278,8 @@ function DashboardView({docs,company,setPage,setNewDocType}){
   const inv=my.filter(d=>d.type==='invoice')
   const sym=company?.currency_symbol||'R'
   const ac=coColor(company)
-  const totalInv=inv.reduce((s,d)=>s+(d.totals?.total||0),0)
+  const issued=inv.filter(d=>!['Draft','Cancelled'].includes(d.status))
+  const totalInv=issued.reduce((s,d)=>s+(d.totals?.total||0),0)
   const paid=inv.filter(d=>d.status==='Paid').reduce((s,d)=>s+(d.totals?.total||0),0)
   const outstanding=inv.filter(d=>['Sent','Overdue'].includes(d.status)).reduce((s,d)=>s+(d.totals?.total||0),0)
   const overdue=inv.filter(d=>d.status==='Overdue')
@@ -264,11 +294,11 @@ function DashboardView({docs,company,setPage,setNewDocType}){
 
   return <div>
     <h1 style={{fontSize:26,fontWeight:900,color:T.navy,marginBottom:4}}>{company?.name||'Dashboard'}</h1>
-    <p style={{fontSize:13,color:T.grey600,marginBottom:24}}>{fmtDate(today())}</p>
+    <p style={{fontSize:13,color:T.grey600,marginBottom:24}}>{fmtDate(today())} · All issued records</p>
     <div className="stat-grid">
       {[
         {l:'Total Invoiced',v:fmtMoney(totalInv,sym),c:ac,i:'📊'},
-        {l:'Collected',v:fmtMoney(paid,sym),c:T.green,i:'✅'},
+        {l:'Marked Paid',v:fmtMoney(paid,sym),c:T.green,i:'✅'},
         {l:'Outstanding',v:fmtMoney(outstanding,sym),c:T.blue,i:'⏳'},
         {l:'Overdue',v:`${overdue.length} invoice${overdue.length!==1?'s':''}`,c:T.red,i:'⚠️'},
       ].map(s=>(
@@ -287,7 +317,7 @@ function DashboardView({docs,company,setPage,setNewDocType}){
             <button key={t.key} className="btn btn-s" style={{justifyContent:'flex-start',gap:8,fontSize:12}}
               onClick={()=>{setNewDocType(t.key);setPage('documents')}}>
               <span style={{width:8,height:8,borderRadius:'50%',background:t.key==='invoice'?ac:t.color,flexShrink:0,display:'inline-block'}}/>
-              {t.label}
+              {docLabel(t.key,company)}
             </button>
           ))}
         </div>
@@ -320,7 +350,7 @@ function DashboardView({docs,company,setPage,setNewDocType}){
             {recent.map(d=>(
               <tr key={d.id}>
                 <td style={{fontWeight:700,color:T.navy}}>{d.number}</td>
-                <td><span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:10,background:(d.type==='invoice'?ac:DT[d.type]?.color||T.navy)+'22',color:d.type==='invoice'?ac:DT[d.type]?.color||T.navy}}>{DT[d.type]?.label}</span></td>
+                <td><span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:10,background:(d.type==='invoice'?ac:DT[d.type]?.color||T.navy)+'22',color:d.type==='invoice'?ac:DT[d.type]?.color||T.navy}}>{docLabel(d.type,company)}</span></td>
                 <td>{d.client_name}</td>
                 <td style={{color:T.grey600,whiteSpace:'nowrap'}}>{fmtDate(d.date)}</td>
                 <td style={{fontWeight:700}}>{fmtMoney(d.totals?.total,sym)}</td>
@@ -380,7 +410,7 @@ function LineItems({items,setItems,vatReg,sym}){
       </>}
       <div style={{height:1,background:T.grey200,margin:'8px 0'}}/>
       <div style={{display:'flex',justifyContent:'space-between',fontSize:13,fontWeight:800,color:T.navy}}>
-        <span>TOTAL DUE{vatReg?'':' (VAT Incl.)'}</span><span>{fmtMoney(tots.total,sym)}</span>
+        <span>TOTAL DUE</span><span>{fmtMoney(tots.total,sym)}</span>
       </div>
     </div>
   </div>
@@ -406,7 +436,7 @@ const QUOTE_TC = `1. VALIDITY: This quotation is valid for 30 days from the date
 
 // ── Doc Form ───────────────────────────────────────────────────────────────────
 function DocForm({doc,company,clients,docType,onSave,onClose,onConvertQuote}){
-  const dt=DT[docType]||DT.invoice
+  const dt={...(DT[docType]||DT.invoice),label:docLabel(docType,company)}
   const defaultTerms = docType==='invoice'
     ? 'Payment due within 30 days. EFT preferred. Overdue accounts attract interest at 2% per month.'
     : docType==='quote'
@@ -458,7 +488,7 @@ function DocPrint({doc,company,onBack}){
   const printRef=useRef(null)
   const [generating,setGenerating]=useState(false)
   const ac=coColor(company)
-  const dt={...DT[doc.type]||DT.invoice,color:doc.type==='invoice'?ac:DT[doc.type]?.color||T.navy}
+  const dt={...(DT[doc.type]||DT.invoice),label:docLabel(doc.type,company),color:doc.type==='invoice'?ac:DT[doc.type]?.color||T.navy}
   const sym=company?.currency_symbol||'R'
   const vatReg=company?.vat_registered
   const banking=(company?.banking||[]).filter(b=>b.bank)
@@ -537,6 +567,7 @@ function DocPrint({doc,company,onBack}){
       </div>
     </div>
     <div className="print-doc" ref={printRef}>
+      {doc.status==='Draft'&&<div className="draft-watermark">DRAFT</div>}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:26,paddingBottom:18,borderBottom:`3px solid ${dt.color}`}}>
         <div style={{maxWidth:300}}>
           {company?.logo&&<img src={company.logo} alt="" style={{maxHeight:200,maxWidth:300,objectFit:'contain',objectPosition:'left',marginBottom:14,display:'block'}}/>}
@@ -556,7 +587,7 @@ function DocPrint({doc,company,onBack}){
           <div style={{fontSize:26,fontWeight:900,color:dt.color,textTransform:'uppercase',letterSpacing:'-.5px'}}>{dt.label}</div>
           <div style={{fontSize:16,fontWeight:800,color:T.navy,marginTop:3,display:'flex',alignItems:'center',justifyContent:'flex-end',gap:8}}>
             <span>{doc.number}</span>
-            {doc.type==='receipt'&&<span style={{display:'inline-flex',alignItems:'center',gap:4,border:`1.5px solid ${T.green}`,borderRadius:20,padding:'2px 10px',fontSize:11,fontWeight:800,color:T.green,textTransform:'uppercase',letterSpacing:'.4px',whiteSpace:'nowrap'}}>✓ Paid in Full</span>}
+            {doc.type==='receipt'&&<span style={{display:'inline-flex',alignItems:'center',gap:4,border:`1.5px solid ${T.green}`,borderRadius:20,padding:'2px 10px',fontSize:11,fontWeight:800,color:T.green,textTransform:'uppercase',letterSpacing:'.4px',whiteSpace:'nowrap'}}>✓ Payment Received</span>}
           </div>
           <div style={{fontSize:12,color:'#374151',marginTop:10,lineHeight:1.8}}>
             <div><span style={{color:'#374151'}}>Date: </span><strong>{fmtDate(doc.date)}</strong></div>
@@ -605,7 +636,7 @@ function DocPrint({doc,company,onBack}){
             <div style={{display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:`1px solid ${T.grey100}`,fontSize:12}}><span style={{color:T.grey600}}>VAT (15%)</span><span>{fmtMoney(tot.vat,sym)}</span></div>
           </>}
           <div style={{display:'flex',justifyContent:'space-between',padding:'9px 10px',marginTop:4,background:dt.color,borderRadius:6}}>
-            <span style={{fontSize:13,fontWeight:800,color:'#fff'}}>{doc.type==='receipt'?'AMOUNT PAID':`TOTAL${vatReg?' DUE':' DUE (VAT Incl.)'}`}</span>
+            <span style={{fontSize:13,fontWeight:800,color:'#fff'}}>{doc.type==='receipt'?'AMOUNT RECEIVED':'TOTAL DUE'}</span>
             <span style={{fontSize:13,fontWeight:900,color:'#fff',whiteSpace:'nowrap'}}>{fmtMoney(tot.total,sym)}</span>
           </div>
         </div>
@@ -667,7 +698,7 @@ function Documents({docs,clients,company,onSave,onDelete,onStatusChange,initDocT
   }).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))
   const handleSave=doc=>{onSave(doc);setNewType(null);setEditing(null)}
   const convertQuote=async(quote)=>{
-    if(!confirm('Convert this quote to a Tax Invoice?'))return
+    if(!confirm(`Convert this quote to ${docLabel('invoice',company)}?`))return
     const nextNo=company?.next_nos?.invoice||1
     onSave({...quote,id:undefined,type:'invoice',number:`INV-${nextNo}`,status:'Draft',date:today(),due:addDays(today(),30),linked_to:quote.id})
     setEditing(null);setNewType(null)
@@ -685,7 +716,7 @@ function Documents({docs,clients,company,onSave,onDelete,onStatusChange,initDocT
   const chipColor=type=>type==='invoice'?ac:DT[type]?.color||T.navy
   return <div>
     {(newType||editing)&&(
-      <Modal title={editing?`Edit ${DT[editing.type]?.label}`:`New ${DT[newType]?.label}`} onClose={()=>{setNewType(null);setEditing(null)}} lg>
+      <Modal title={editing?`Edit ${docLabel(editing.type,company)}`:`New ${docLabel(newType,company)}`} onClose={()=>{setNewType(null);setEditing(null)}} lg>
         <DocForm doc={editing} company={company} clients={clients} docType={editing?editing.type:newType} onSave={handleSave} onClose={()=>{setNewType(null);setEditing(null)}} onConvertQuote={convertQuote}/>
       </Modal>
     )}
@@ -702,8 +733,8 @@ function Documents({docs,clients,company,onSave,onDelete,onStatusChange,initDocT
     )}
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:20,flexWrap:'wrap',gap:10}}>
       <div><h1 style={{fontSize:24,fontWeight:900,color:T.navy}}>Documents</h1><p style={{fontSize:13,color:T.grey600}}>{company?.name}</p></div>
-      <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>
-        {DOC_TYPES.map(t=><Btn key={t.key} v="s" sz="sm" onClick={()=>setNewType(t.key)}>+ {t.label}</Btn>)}
+      <div className="doc-create-actions" style={{display:'flex',gap:7,flexWrap:'wrap'}}>
+        {DOC_TYPES.map(t=><Btn key={t.key} v="s" sz="sm" onClick={()=>setNewType(t.key)}>+ {docLabel(t.key,company)}</Btn>)}
       </div>
     </div>
     <div style={{display:'flex',gap:7,marginBottom:16}}>
@@ -715,14 +746,14 @@ function Documents({docs,clients,company,onSave,onDelete,onStatusChange,initDocT
       <input type="text" placeholder="Search # or client…" value={search} onChange={e=>setSearch(e.target.value)} style={{width:180}}/>
       <select value={typeF} onChange={e=>setTypeF(e.target.value)}>
         <option value="all">All Types</option>
-        {DOC_TYPES.map(t=><option key={t.key} value={t.key}>{t.label}</option>)}
+        {DOC_TYPES.map(t=><option key={t.key} value={t.key}>{docLabel(t.key,company)}</option>)}
       </select>
       <select value={statF} onChange={e=>setStatF(e.target.value)}>
         <option value="all">All Statuses</option>
         {Object.keys(SM).map(s=><option key={s} value={s}>{s}</option>)}
       </select>
     </div>
-    <div className="card0">
+    <div className="card0 desktop-doc-table">
       <div style={{overflowX:'auto'}}>
         <table className="tbl">
           <thead><tr><th>#</th><th>Type</th><th>Client</th><th>Date</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead>
@@ -732,7 +763,7 @@ function Documents({docs,clients,company,onSave,onDelete,onStatusChange,initDocT
               const sc=SM[d.status]||SM.Draft;const cc=chipColor(d.type)
               return <tr key={d.id}>
                 <td style={{fontWeight:800,color:T.navy}}>{d.number}</td>
-                <td><span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:10,background:cc+'18',color:cc}}>{DT[d.type]?.label}</span></td>
+                <td><span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:10,background:cc+'18',color:cc}}>{docLabel(d.type,company)}</span></td>
                 <td>{d.client_name}</td>
                 <td style={{color:T.grey600,whiteSpace:'nowrap'}}>{fmtDate(d.date)}</td>
                 <td style={{fontWeight:700,whiteSpace:'nowrap'}}>{fmtMoney(d.totals?.total,sym)}</td>
@@ -748,6 +779,35 @@ function Documents({docs,clients,company,onSave,onDelete,onStatusChange,initDocT
           </tbody>
         </table>
       </div>
+    </div>
+    <div className="mobile-doc-list">
+      {!filtered.length&&<div className="card" style={{textAlign:'center',color:T.grey400}}>No documents found.</div>}
+      {filtered.map(d=>{
+        const sc=SM[d.status]||SM.Draft
+        const cc=chipColor(d.type)
+        return <article className="mobile-doc-card" key={d.id}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10}}>
+            <div>
+              <div style={{fontSize:15,fontWeight:900,color:T.navy}}>{d.number}</div>
+              <div style={{fontSize:11,fontWeight:700,color:cc,marginTop:3}}>{docLabel(d.type,company)}</div>
+            </div>
+            <select aria-label={`Status for ${d.number}`} value={d.status} onChange={e=>onStatusChange(d.id,e.target.value)} style={{border:'none',background:sc.bg,color:sc.fg,padding:'5px 9px',borderRadius:12,fontWeight:700,fontSize:11}}>
+              {(DST[d.type]||['Draft','Sent']).map(s=><option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div style={{fontSize:13,fontWeight:700,marginTop:12}}>{d.client_name}</div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginTop:8}}>
+            <div style={{fontSize:11,color:T.grey600}}>{fmtDate(d.date)}{d.due?` · Due ${fmtDate(d.due)}`:''}</div>
+            <div style={{fontSize:16,fontWeight:900,color:T.navy}}>{fmtMoney(d.totals?.total,sym)}</div>
+          </div>
+          <div className="mobile-doc-actions">
+            <Btn v="s" sz="sm" onClick={()=>setPreview(d)}>Preview</Btn>
+            <Btn v="s" sz="sm" onClick={()=>setEditing(d)}>Edit</Btn>
+            {d.type==='invoice'&&<Btn v="tl" sz="sm" onClick={()=>setRecurSetup(d)}>Repeat</Btn>}
+            <Btn v="d" sz="sm" onClick={()=>confirm('Delete this document?')&&onDelete(d.id)}>Delete</Btn>
+          </div>
+        </article>
+      })}
     </div>
     </>:
     <div className="card0">
@@ -838,7 +898,7 @@ function Clients({clients,docs,company,onSave,onDelete}){
 
 // ── Companies ──────────────────────────────────────────────────────────────────
 function Companies({companies,activeCoId,onSave,onDelete,setActiveCoId}){
-  const blank={name:'',trading_as:'',reg:'',vat:'',vat_registered:false,address:'',email:'',phone:'',website:'',logo:null,accent_color:'#0D1F3C',banking:[{id:uid(),bank:'',accountName:'',accountNo:'',accountType:'',branchCode:'',swift:'',reference:''}],currency_symbol:'R',next_nos:{invoice:1001,quote:101,delivery:501,credit:201,receipt:801}}
+  const blank={name:'',trading_as:'',reg:'',vat:'',vat_registered:false,address:'',email:'',phone:'',website:'',logo:null,accent_color:'#0D1F3C',business_pack:'general_services',currency_code:'ZAR',banking:[{id:uid(),bank:'',accountName:'',accountNo:'',accountType:'',branchCode:'',swift:'',reference:''}],currency_symbol:'R',next_nos:{invoice:1001,quote:101,delivery:501,credit:201,receipt:801}}
   const [form,setForm]=useState(null)
   const [banking,setBanking]=useState([])
   const logoRef=useRef()
@@ -880,8 +940,9 @@ function Companies({companies,activeCoId,onSave,onDelete,setActiveCoId}){
           </div>
           <div className="field"><Lbl text="Company Name" req/><Inp value={form.name} onChange={v=>set('name',v)}/></div>
           <div className="field"><Lbl text="Trading As"/><Inp value={form.trading_as||''} onChange={v=>set('trading_as',v)}/></div>
+          <div className="field s2"><Lbl text="Business Type"/><Sel value={form.business_pack||'general_services'} onChange={v=>set('business_pack',v)} options={[{v:'general_services',l:'General Services'},{v:'property_rental',l:'Property Rental'}]}/><div style={{fontSize:11,color:T.grey600,marginTop:5}}>Sets the terminology and document workflow for this company. Property and lease screens will arrive in the rental module.</div></div>
           <div className="field"><Lbl text="Registration No"/><Inp value={form.reg||''} onChange={v=>set('reg',v)}/></div>
-          <div className="field"><Lbl text="Currency Symbol"/><Inp value={form.currency_symbol||'R'} onChange={v=>set('currency_symbol',v)}/></div>
+          <div className="field"><Lbl text="Currency"/><Inp value="South African Rand (ZAR)" onChange={()=>{}} disabled/></div>
           <div className="vat-row s2">
             <input type="checkbox" id="coVat" checked={!!form.vat_registered} onChange={e=>set('vat_registered',e.target.checked)}/>
             <label htmlFor="coVat">This company is VAT registered</label>
@@ -936,6 +997,7 @@ function Companies({companies,activeCoId,onSave,onDelete,setActiveCoId}){
           <div style={{fontWeight:800,fontSize:14,color:T.navy}}>{co.name}</div>
           {co.trading_as&&<div style={{fontSize:12,color:T.grey600}}>t/a {co.trading_as}</div>}
           {co.reg&&<div style={{fontSize:11,color:T.grey400,marginTop:3}}>Reg: {co.reg}</div>}
+          <div style={{fontSize:11,color:T.grey600,marginTop:3}}>{co.business_pack==='property_rental'?'Property Rental':'General Services'}</div>
           {co.vat_registered&&co.vat&&<div style={{fontSize:11,color:T.teal,fontWeight:700}}>VAT: {co.vat}</div>}
           {co.banking?.[0]?.bank&&<div style={{fontSize:11,color:T.grey600,marginTop:3}}>🏦 {co.banking[0].bank}</div>}
           <div style={{display:'flex',gap:7,marginTop:12,paddingTop:10,borderTop:`1px solid ${T.grey100}`,flexWrap:'wrap'}}>
@@ -1079,7 +1141,7 @@ export default function Dashboard(){
   const deleteClient=async(id)=>{await supabase.from('clients').delete().eq('id',id);setClients(c=>c.filter(x=>x.id!==id));notify('Client deleted')}
   const saveCompany=async(co)=>{
     const isNew=!co.id
-    const payload={user_id:user.id,name:co.name,trading_as:co.trading_as||'',reg:co.reg||'',vat:co.vat||'',vat_registered:co.vat_registered||false,address:co.address||'',email:co.email||'',phone:co.phone||'',website:co.website||'',logo:co.logo||null,accent_color:co.accent_color||T.navy,currency_symbol:co.currency_symbol||'R',banking:co.banking||[],next_nos:co.next_nos||{invoice:1001,quote:101,delivery:501,credit:201,receipt:801}}
+    const payload={user_id:user.id,name:co.name,trading_as:co.trading_as||'',reg:co.reg||'',vat:co.vat||'',vat_registered:co.vat_registered||false,address:co.address||'',email:co.email||'',phone:co.phone||'',website:co.website||'',logo:co.logo||null,accent_color:co.accent_color||T.navy,business_pack:co.business_pack||'general_services',currency_code:'ZAR',currency_symbol:'R',banking:co.banking||[],next_nos:co.next_nos||{invoice:1001,quote:101,delivery:501,credit:201,receipt:801}}
     if(isNew){const {data}=await supabase.from('companies').insert(payload).select().single();setCompanies(c=>[...c,data]);if(!activeCoId)setActiveCoId(data.id)}
     else{const {data}=await supabase.from('companies').update(payload).eq('id',co.id).select().single();setCompanies(c=>c.map(x=>x.id===co.id?data:x))}
     notify('Company saved')
@@ -1100,7 +1162,7 @@ export default function Dashboard(){
     setRecurring(r=>r.filter(x=>x.id!==id));notify('Recurring schedule deleted')
   }
 
-  if(user===undefined||loading)return <div className="loading"><div className="spinner"/><span style={{color:T.grey400}}>Loading Invoxa…</span></div>
+  if(user===undefined||loading)return <div className="loading"><div className="spinner"/><span style={{color:T.grey400}}>Loading MyInvox…</span></div>
 
   // Subscription access check
   const access=checkAccess(subscription)
@@ -1109,11 +1171,11 @@ export default function Dashboard(){
     return <div className="expired-wall">
       <div style={{fontSize:48,marginBottom:8}}>⏰</div>
       <h1 style={{fontSize:28,fontWeight:900,color:T.navy,letterSpacing:'-1px'}}>Your trial has ended</h1>
-      <p style={{color:T.grey600,fontSize:16,maxWidth:440,lineHeight:1.6}}>Your 14-day free trial of Invoxa has expired. Subscribe to continue accessing your documents and creating new ones.</p>
+      <p style={{color:T.grey600,fontSize:16,maxWidth:440,lineHeight:1.6}}>Your 14-day free trial of MyInvox has expired. Subscribe to continue accessing your documents and creating new ones.</p>
       <div style={{background:T.white,border:`1px solid ${T.grey200}`,borderRadius:12,padding:'24px 32px',textAlign:'center',marginTop:8}}>
         <div style={{fontSize:36,fontWeight:900,color:T.navy}}>R149<span style={{fontSize:16,fontWeight:500,color:T.grey600}}>/month</span></div>
         <p style={{color:T.grey600,fontSize:13,margin:'8px 0 16px'}}>All features · Unlimited documents · Cloud sync</p>
-        <a href={`mailto:ndyoko.lwazi@gmail.com?subject=Invoxa Subscription&body=Hi, I would like to subscribe to Invoxa at R149/month. My account email is: ${user?.email}`}
+        <a href={`mailto:ndyoko.lwazi@gmail.com?subject=MyInvox Subscription&body=Hi, I would like to subscribe to MyInvox at R149/month. My account email is: ${user?.email}`}
           style={{display:'inline-block',background:T.blue,color:'#fff',padding:'12px 28px',borderRadius:9,fontWeight:700,fontSize:14,textDecoration:'none'}}>
           Subscribe via Email →
         </a>
@@ -1125,7 +1187,7 @@ export default function Dashboard(){
   if(!companies.length&&!loading){
     return <div className="expired-wall">
       <div style={{fontSize:40,marginBottom:16}}>🏢</div>
-      <div style={{fontWeight:800,fontSize:20,color:T.navy,marginBottom:8}}>Welcome to Invoxa</div>
+      <div style={{fontWeight:800,fontSize:20,color:T.navy,marginBottom:8}}>Welcome to MyInvox</div>
       <div style={{color:T.grey600,marginBottom:24,textAlign:'center',maxWidth:380}}>Let's set up your first company to get started.</div>
       <Companies companies={[]} activeCoId={null} onSave={saveCompany} onDelete={()=>{}} setActiveCoId={setActiveCoId}/>
     </div>
@@ -1144,7 +1206,7 @@ export default function Dashboard(){
       {access.trial&&access.daysLeft<=5&&(
         <div className="trial-bar no-print">
           ⏳ {access.daysLeft} day{access.daysLeft!==1?'s':''} left in your free trial.
-          <a href={`mailto:ndyoko.lwazi@gmail.com?subject=Invoxa Subscription&body=Hi, I would like to subscribe to Invoxa. My account email is: ${user?.email}`}>Subscribe now for R149/month →</a>
+          <a href={`mailto:ndyoko.lwazi@gmail.com?subject=MyInvox Subscription&body=Hi, I would like to subscribe to MyInvox. My account email is: ${user?.email}`}>Subscribe now for R149/month →</a>
         </div>
       )}
       <div className="topbar no-print">
@@ -1163,6 +1225,7 @@ export default function Dashboard(){
       </div>
       <div className="content">{pages[page]||pages.dashboard}</div>
     </div>
+    <MobileNav page={page} setPage={setPage} onNew={()=>{setNewDocType('invoice');setPage('documents')}}/>
     {toast&&<Toast msg={toast} onDone={()=>setToast(null)}/>}
   </div>
 }

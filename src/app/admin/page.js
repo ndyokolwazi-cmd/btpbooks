@@ -76,10 +76,8 @@ export default function AdminPage() {
 
   const loadSubs = async () => {
     setLoading(true)
-    const { data } = await supabase
-      .from('subscriptions')
-      .select('*')
-      .order('created_at', { ascending: false })
+    const { data, error } = await supabase.rpc('admin_list_subscriptions')
+    if (error) notify('Error: ' + error.message)
     setSubs(data || [])
     setLoading(false)
   }
@@ -90,18 +88,15 @@ export default function AdminPage() {
   }
 
   const saveEdit = async () => {
-    const { error } = await supabase
-      .from('subscriptions')
-      .update({
-        status: editing.status,
-        subscription_ends_at: editing.subscription_ends_at || null,
-        trial_ends_at: editing.trial_ends_at,
-        notes: editing.notes || '',
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', editing.id)
+    const { data, error } = await supabase.rpc('admin_update_subscription', {
+      p_id: editing.id,
+      p_status: editing.status,
+      p_trial_ends_at: editing.trial_ends_at,
+      p_subscription_ends_at: editing.subscription_ends_at || null,
+      p_notes: editing.notes || '',
+    })
     if (error) { notify('Error: ' + error.message); return }
-    setSubs(s => s.map(x => x.id === editing.id ? { ...x, ...editing } : x))
+    setSubs(s => s.map(x => x.id === editing.id ? data : x))
     setEditing(null)
     notify('Subscription updated')
   }
@@ -134,7 +129,7 @@ export default function AdminPage() {
     <div className="access-denied">
       <div style={{fontSize:48}}>🔒</div>
       <h1 style={{fontSize:24,fontWeight:900,color:T.navy}}>Access Denied</h1>
-      <p style={{color:T.grey600}}>This page is restricted to Invoxa administrators.</p>
+      <p style={{color:T.grey600}}>This page is restricted to MyInvox administrators.</p>
       <a href="/" style={{color:T.blue,fontWeight:600}}>← Back to app</a>
     </div>
   )
@@ -201,7 +196,7 @@ export default function AdminPage() {
       )}
 
       <div className="topbar">
-        <h1>Inv<span>o</span>xa <span style={{fontSize:12,fontWeight:500,color:'rgba(255,255,255,.5)',letterSpacing:'normal'}}>Admin</span></h1>
+        <h1>My<span>Invox</span> <span style={{fontSize:12,fontWeight:500,color:'rgba(255,255,255,.5)',letterSpacing:'normal'}}>Admin</span></h1>
         <div style={{display:'flex',gap:8,alignItems:'center'}}>
           <span style={{fontSize:12,color:'rgba(255,255,255,.5)'}}>{user.email}</span>
           <a href="/dashboard" style={{background:'rgba(255,255,255,.1)',color:'#fff',padding:'6px 14px',borderRadius:7,fontSize:12,fontWeight:600,textDecoration:'none'}}>← App</a>
@@ -276,7 +271,7 @@ export default function AdminPage() {
         </div>
 
         <div style={{fontSize:12,color:T.grey400,textAlign:'center',paddingBottom:24}}>
-          Invoxa Admin · Only accessible to {ADMIN_EMAIL}
+          MyInvox Admin · Only accessible to {ADMIN_EMAIL}
         </div>
       </div>
     </div>

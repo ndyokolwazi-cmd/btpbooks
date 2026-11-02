@@ -19,3 +19,8 @@ export function saveDemoDraft(storage,record,config){
   storage.setItem(DEMO_STORE_KEY,JSON.stringify({version:1,documents,config}))
   return {saved,documents}
 }
+
+export function saveDemoConfig(storage,config){
+  const existing=loadDemoStore(storage)
+  storage.setItem(DEMO_STORE_KEY,JSON.stringify({version:1,documents:existing.documents,config}))
+}

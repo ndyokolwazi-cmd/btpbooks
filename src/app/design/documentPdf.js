@@ -59,3 +59,30 @@ export async function buildReceiptPdf(invoice,payment,config){
  pdf.text('Fictional preview receipt · No bank transaction was performed.',14,288)
  return new File([pdf.output('blob')],`${invoice.id}-${payment.date}-RECEIPT-SAMPLE.pdf`,{type:'application/pdf'})
 }
+
+export async function buildStatementPdf(customer,documents,payments,config){
+ const [{jsPDF},{default:autoTable}]=await Promise.all([import('jspdf'),import('jspdf-autotable')])
+ const region=REGIONS.find(r=>r[0]===config.region)||REGIONS[0],currency=region[2]
+ const money=n=>new Intl.NumberFormat(region[3],{style:'currency',currency}).format(n)
+ const invoices=documents.filter(document=>!document.id.startsWith('QUO')&&(document.currency||currency)===currency)
+ const invoiceIds=new Set(invoices.map(document=>document.id))
+ const allocated=payments.filter(payment=>invoiceIds.has(payment.invoiceId)&&(payment.currency||currency)===currency)
+ const outstanding=invoices.reduce((sum,document)=>sum+Number(document.balance??(document.status==='Paid'?0:(document.amount||0))),0)
+ const pdf=new jsPDF(),accent=config.accent||'#146e60'
+ pdf.setFont(config.theme==='classic'?'times':'helvetica');pdf.setFillColor(accent);pdf.rect(0,0,210,6,'F')
+ pdf.setTextColor(accent);pdf.setFontSize(20);pdf.text(config.name||'Your company',14,27)
+ pdf.setTextColor('#17231e');pdf.setFontSize(15);pdf.text('CUSTOMER STATEMENT',14,42)
+ pdf.setTextColor('#68776e');pdf.setFontSize(9);pdf.text(`Statement date: ${new Date().toLocaleDateString('en-ZA')}`,14,50)
+ pdf.setTextColor('#17231e');pdf.setFontSize(11);pdf.text(customer.name,14,64)
+ let y=70
+ for(const detail of [customer.address,customer.email,customer.phone,customer.vat?`VAT: ${customer.vat}`:''].filter(Boolean)){pdf.setFontSize(9);pdf.text(String(detail),14,y);y+=5}
+ autoTable(pdf,{startY:y+5,margin:{left:14,right:14,bottom:20},head:[['Date','Document','Description','Status','Debit','Paid','Balance']],body:invoices.map(document=>[document.date||'—',document.id,document.detail||'Invoice',document.status,money(document.amount),money(document.paid||0),money(document.balance??(document.status==='Paid'?0:document.amount))]),showHead:'everyPage',rowPageBreak:'avoid',styles:{fontSize:8,cellPadding:2.5,overflow:'linebreak'},headStyles:{fillColor:accent}})
+ y=pdf.lastAutoTable.finalY+10
+ if(y>260){pdf.addPage();y=20}
+ pdf.setFontSize(10);pdf.setTextColor('#17231e');pdf.text(`Total invoiced: ${money(invoices.reduce((sum,document)=>sum+document.amount,0))}`,14,y)
+ pdf.text(`Payments recorded: ${money(allocated.reduce((sum,payment)=>sum+payment.amount,0))}`,14,y+7)
+ pdf.setFontSize(13);pdf.setTextColor(accent);pdf.text(`Balance outstanding: ${money(outstanding)}`,14,y+17)
+ if(allocated.length){autoTable(pdf,{startY:y+28,margin:{left:14,right:14,bottom:20},head:[['Payment date','Invoice','Method','Reference','Amount']],body:allocated.map(payment=>[payment.date,payment.invoiceId,payment.method,payment.reference||'—',money(payment.amount)]),showHead:'everyPage',styles:{fontSize:8,cellPadding:2.5},headStyles:{fillColor:accent}})}
+ const pages=pdf.getNumberOfPages();for(let page=1;page<=pages;page++){pdf.setPage(page);pdf.setFontSize(8);pdf.setTextColor('#68776e');pdf.text('Fictional preview statement · No payment is due.',14,288);pdf.text(`Page ${page} of ${pages}`,195,288,{align:'right'})}
+ return new File([pdf.output('blob')],`${String(customer.name).replace(/[^a-z0-9]+/gi,'-')}-STATEMENT-SAMPLE.pdf`,{type:'application/pdf'})
+}

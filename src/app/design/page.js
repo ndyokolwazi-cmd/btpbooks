@@ -48,7 +48,8 @@ export default function DesignPreview(){
   const theme=THEMES.find(t=>t[0]===config.theme)||THEMES[2]
   const cash=(n,currency=region[2])=>new Intl.NumberFormat(region[3],{style:'currency',currency}).format(n)
   const seedDocs=rental?[{id:'RENT-0104',name:'Alex Morgan',detail:'Oak Court · Unit 04',amount:6500,status:'Overdue'},{id:'RENT-0103',name:'Taylor Smith',detail:'Oak Court · Unit 02',amount:5800,status:'Paid'},{id:'RENT-0102',name:'Sam Jordan',detail:'Willow Lane · Unit 01',amount:7200,status:'Sent'}]:[{id:'INV-0104',name:'Olive & Co.',detail:'Website design · Invoice',amount:8400,status:'Overdue'},{id:'QUO-0042',name:'The Local Studio',detail:'Brand identity · Quotation',amount:4250,status:'Draft'},{id:'INV-0103',name:'Coastline Collective',detail:'Monthly support · Invoice',amount:1800,status:'Paid'}]
-  const docs=[...savedDocs.map(d=>documentBalance(d,payments,today)),...seedDocs]
+  const savedIds=new Set(savedDocs.map(d=>d.id))
+  const docs=[...savedDocs.map(d=>documentBalance(d,payments,today)),...seedDocs.filter(d=>!savedIds.has(d.id))]
   const activeInvoices=docs.filter(d=>d.demoSaved&&!d.id.startsWith('QUO')&&['Issued','Sent'].includes(d.baseStatus)&&(d.currency||'ZAR')===region[2])
   const received=payments.filter(p=>p.currency===region[2]).reduce((sum,p)=>sum+p.amount,0)
   const outstanding=activeInvoices.reduce((sum,d)=>sum+d.balance,0)
@@ -60,9 +61,22 @@ export default function DesignPreview(){
   useEffect(()=>{
     let active=true;setFile(null);setNotice('')
     if(!selected)return
+    if(!selected.demoSaved&&selected.status==='Overdue'){
+      try{
+        const due=new Date(Date.now()-86400000).toISOString().slice(0,10)
+        const date=new Date(Date.now()-31*86400000).toISOString().slice(0,10)
+        const draft={...selected,status:'Draft',date,due,currency:region[2],customer:{name:selected.name},items:[{id:crypto.randomUUID(),desc:selected.detail,qty:1,rate:selected.amount,discount:0,vatRate:0}],workspace:{...config},terms:config.terms||'Payment due by the stated date.',notes:'Interactive sample invoice',rentalPeriod:rental?date.slice(0,7):''}
+        saveDemoDraft(localStorage,draft,config)
+        transitionDemoDocument(localStorage,selected.id,'Issued')
+        const sent=transitionDemoDocument(localStorage,selected.id,'Sent')
+        const invoice=documentBalance(sent.saved,payments,today)
+        setSavedDocs(sent.documents);setSelected(invoice);setSaveMessage(`${selected.id} is now interactive. You can record a full or partial payment.`)
+      }catch(error){setNotice(error.message)}
+      return
+    }
     buildDocumentPdf(selected,config).then(pdfFile=>{if(active)setFile(pdfFile)}).catch(()=>{if(active)setNotice('PDF preparation failed. Close and reopen this sample to retry.')})
     return()=>{active=false}
-  },[selected,config])
+  },[selected,config,payments,region,rental,today])
   const download=()=>{if(!file)return;const url=URL.createObjectURL(file);const a=document.createElement('a');a.href=url;a.download=file.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),60000)}
   const share=async()=>{if(!file)return;if(navigator.share&&navigator.canShare?.({files:[file]})){try{await navigator.share({files:[file]})}catch(e){if(e.name!=='AbortError')setNotice('Sharing could not open. Download the PDF and attach it in WhatsApp.')}}else{download();setNotice('PDF downloaded. Attach it from Files or Downloads in WhatsApp.')}}
   const nav=[['home','home','Overview'],['docs','docs','Documents'],['people','people',rental?'Tenants':'Customers'],['payments','wallet','Payments'],['more','more','More']]

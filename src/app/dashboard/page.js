@@ -509,6 +509,9 @@ function DocForm({doc,company,clients,docType,onSave,onClose,onConvertQuote}){
 function DocPrint({doc,company,onBack}){
   const printRef=useRef(null)
   const [generating,setGenerating]=useState(false)
+  const [preparedPdf,setPreparedPdf]=useState(null)
+  const [pdfError,setPdfError]=useState('')
+  const [shareNotice,setShareNotice]=useState('')
   const ac=coColor(company)
   const dt={...(DT[doc.type]||DT.invoice),label:docLabel(doc.type,company),color:doc.type==='invoice'?ac:DT[doc.type]?.color||T.navy}
   const sym=company?.currency_symbol||'R'
@@ -529,23 +532,7 @@ function DocPrint({doc,company,onBack}){
     const body=`Dear ${doc.client_name},\n\nPlease find ${dt.label} ${doc.number} attached.\n\nAmount: ${sym} ${Number(tot.total).toFixed(2)}${doc.due?`\nDue Date: ${fmtDate(doc.due)}`:''}\nReference: ${doc.number}\n\nBanking Details:\n${banking.map(b=>`Bank: ${b.bank}\nAccount Name: ${b.accountName}\nAccount No: ${b.accountNo}\nBranch Code: ${b.branchCode}`).join('\n')}\n\nKind regards,\n${company?.name}`
     window.open(`mailto:?subject=${encodeURIComponent(sub)}&body=${encodeURIComponent(body)}`)
   }
-  const share=async()=>{
-    if(navigator.share){
-      try{
-        await navigator.share({
-          title:`${dt.label} ${doc.number}`,
-          text:`${dt.label} ${doc.number} from ${company?.name} for ${sym} ${Number(tot.total).toFixed(2)}${doc.due?` due ${fmtDate(doc.due)}`:''}. Ref: ${doc.number}.`,
-        })
-      }catch(e){}
-    } else {
-      whatsapp()
-    }
-  }
-  const isMobileDevice=()=>typeof navigator!=='undefined'&&/iPhone|iPad|Android|Mobile/i.test(navigator.userAgent)
-  const downloadPdf=async()=>{
-    if(generating)return
-    setGenerating(true)
-    try{
+  const buildPdf=async()=>{
       const [{default:jsPDF},{default:autoTable}]=await Promise.all([import('jspdf'),import('jspdf-autotable')])
       const pdf=new jsPDF({unit:'mm',format:'a4',orientation:'portrait'})
       const pageW=210,pageH=297,margin=14,contentW=pageW-margin*2
@@ -668,11 +655,40 @@ function DocPrint({doc,company,onBack}){
         pdf.text(`Page ${p} of ${pageCount}`,pageW-margin,pageH-8,{align:'right'})
       }
       const safeNumber=(doc.number||'document').replace(/[^a-z0-9-_]/gi,'_')
-      pdf.save(`${dt.label.replace(/\s+/g,'-')}-${safeNumber}.pdf`)
-    }catch(e){
-      alert('Could not generate PDF: '+e.message)
-    }finally{
-      setGenerating(false)
+      const filename=`${dt.label.replace(/\s+/g,'-')}-${safeNumber}.pdf`
+      return new File([pdf.output('blob')],filename,{type:'application/pdf'})
+  }
+
+  useEffect(()=>{
+    let cancelled=false
+    setPreparedPdf(null);setPdfError('');setShareNotice('');setGenerating(true)
+    buildPdf().then(file=>{if(!cancelled)setPreparedPdf(file)})
+      .catch(error=>{if(!cancelled)setPdfError('Could not prepare PDF: '+error.message)})
+      .finally(()=>{if(!cancelled)setGenerating(false)})
+    return()=>{cancelled=true}
+  },[doc,company])
+
+  const downloadPdf=()=>{
+    if(!preparedPdf)return
+    const url=URL.createObjectURL(preparedPdf)
+    const link=document.createElement('a')
+    link.href=url;link.download=preparedPdf.name;document.body.appendChild(link);link.click();link.remove()
+    setTimeout(()=>URL.revokeObjectURL(url),60000)
+  }
+  const share=async()=>{
+    if(!preparedPdf)return
+    setShareNotice('')
+    // The file is prepared before this tap to retain iOS user activation.
+    // Send the file alone: some share targets otherwise prefer the text.
+    if(navigator.share&&navigator.canShare?.({files:[preparedPdf]})){
+      try{await navigator.share({files:[preparedPdf]})}
+      catch(error){
+        if(error.name==='AbortError')return
+        setShareNotice('Sharing could not open. Tap Download PDF, then attach the saved file in WhatsApp or email.')
+      }
+    }else{
+      downloadPdf()
+      setShareNotice('PDF downloaded. This browser cannot share files directly. Open WhatsApp or email and attach the PDF from Downloads or Files.')
     }
   }
 
@@ -680,19 +696,14 @@ function DocPrint({doc,company,onBack}){
     <div className="no-print" style={{marginBottom:18}}>
       <div className="doc-preview-actions">
         <Btn v="p" onClick={()=>window.print()}>🖨 Print</Btn>
-        <Btn v="ok" onClick={downloadPdf} disabled={generating}>{generating?'Generating…':'⬇ Download PDF'}</Btn>
-        {isMobileDevice()
-          ? <Btn v="tl" onClick={share}>📤 Share Invoice</Btn>
-          : <>
-              <Btn v="ok" onClick={email}>✉️ Email</Btn>
-              <Btn v="tl" onClick={whatsapp}>💬 WhatsApp</Btn>
-            </>
-        }
+        <Btn v="ok" onClick={downloadPdf} disabled={!preparedPdf}>{generating?'Preparing PDF…':'⬇ Download PDF'}</Btn>
+        <Btn v="tl" onClick={share} disabled={!preparedPdf}>📤 Share PDF</Btn>
         <Btn v="s" onClick={onBack}>← Back</Btn>
       </div>
       <div style={{background:'#FEF3C7',border:'1px solid #FDE68A',borderRadius:8,padding:'10px 14px',fontSize:12,color:'#92400E',lineHeight:1.6}}>
-        📎 <strong>To send with the invoice attached:</strong> First tap <strong>Download PDF</strong> above, then open your WhatsApp or email app and attach the downloaded file.
+        📎 Tap <strong>Share PDF</strong>, choose WhatsApp or your email app, then choose the recipient. The PDF document will be attached.
       </div>
+      {(pdfError||shareNotice)&&<p role="status" style={{marginTop:10,fontSize:13,color:pdfError?T.red:T.grey600}}>{pdfError||shareNotice}</p>}
     </div>
     <div className="print-doc" ref={printRef}>
       {doc.status==='Draft'&&<div className="draft-watermark">DRAFT</div>}

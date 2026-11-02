@@ -33,6 +33,8 @@ export async function buildDocumentPdf(record,config){
  autoTable(pdf,{startY:y,margin:{left:14,right:14,bottom:20},head:[headers],body:totals.rows.map(i=>[i.desc,String(i.qty),money(i.rate),`${i.discount||0}%`,...(co.vat_registered?[`${i.vatRate||0}%`]:[]),money(i.net)]),showHead:'everyPage',rowPageBreak:'avoid',styles:{font:co.theme==='classic'?'times':'helvetica',fontSize:9,cellPadding:3,overflow:'linebreak'},headStyles:{fillColor:accent},columnStyles:{0:{cellWidth:'auto'}}})
  y=pdf.lastAutoTable.finalY+10
  block('TOTALS',`${totals.discount?`Discount: ${money(totals.discount)}\n`:''}Subtotal: ${money(totals.subtotal)}${co.vat_registered?`\nVAT: ${money(totals.vat)}`:''}\nTotal: ${money(totals.total)}`)
+ if(record.demoSaved&&!quote&&record.status!=='Draft')block('PAYMENT SUMMARY',`Received: ${money(record.paid||0)}\nBalance outstanding: ${money(record.balance??record.amount)}`)
+ if(record.paymentHistory?.length)block('PAYMENT HISTORY',record.paymentHistory.map(payment=>`${payment.date} - ${payment.method} - ${money(payment.amount)}${payment.reference?` - ${payment.reference}`:''}`).join('\n'))
  if(co.banking?.bank){const labels={bank:'Bank',accountName:'Account holder',accountNo:'Account number',accountType:'Account type',branchCode:'Branch code',swift:'SWIFT / BIC',reference:'Reference'};block('BANKING DETAILS',Object.entries(co.banking).filter(([,v])=>v).map(([k,v])=>`${labels[k]||k}: ${v}`).join('\n'))}
  block('PAYMENT TERMS',record.terms??co.terms);block('NOTES',record.notes);block('',co.footer)
  const pages=pdf.getNumberOfPages()

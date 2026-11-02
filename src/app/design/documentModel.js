@@ -48,3 +48,15 @@ export function documentError(record){
  if(calculateItems(record.items,record.workspace?.vat_registered).total<=0)return 'The document total must be greater than zero.'
  return ''
 }
+
+export function documentBalance(record,payments=[],today=localDate()){
+ const paidCents=payments.filter(p=>p.invoiceId===record.id).reduce((sum,p)=>sum+cents(p.amount),0)
+ const balanceCents=Math.max(0,cents(record.amount)-paidCents)
+ const baseStatus=['Paid','Partially paid','Overdue','Expired'].includes(record.status)?record.baseStatus||record.status:record.status
+ const quote=record.id.startsWith('QUO')
+ const overdue=!quote&&baseStatus!=='Draft'&&balanceCents>0&&!!record.due&&record.due<today
+ let status=baseStatus
+ if(quote&&['Finalised','Sent'].includes(baseStatus)&&record.due&&record.due<today)status='Expired'
+ if(!quote&&['Issued','Sent'].includes(baseStatus))status=balanceCents===0?'Paid':paidCents>0?'Partially paid':overdue?'Overdue':baseStatus
+ return {...record,baseStatus,status,paid:paidCents/100,balance:balanceCents/100,overdue,paymentHistory:payments.filter(p=>p.invoiceId===record.id)}
+}

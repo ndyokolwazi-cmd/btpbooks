@@ -121,8 +121,9 @@ export default function DesignPreview(){
   }
   const savePayment=payment=>{
     const result=recordDemoPayment(localStorage,paymentInvoice.id,payment)
-    setPayments(result.payments);setSavedDocs(result.documents);setSelected(result.saved);setPaymentInvoice(null)
+    setPayments(result.payments);setSavedDocs(result.documents);setPaymentInvoice(result.saved)
     setSaveMessage(`Payment recorded on this device. ${result.saved.id}: ${result.saved.status}, balance ${cash(result.saved.balance,result.saved.currency)}.`)
+    return result
   }
   const editDraft=record=>{setEditorInitial(record);setEditorClient(record.customer||{name:record.name});setSelected(null);setCreating(true);setSaveMessage('')}
   const pick=(v)=>{setPack(v);setConfig(c=>({...c,industry:v}));setPage('home');setFilter('all')}

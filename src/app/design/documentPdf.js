@@ -41,3 +41,21 @@ export async function buildDocumentPdf(record,config){
  for(let page=1;page<=pages;page++){pdf.setPage(page);pdf.setFontSize(8);pdf.setTextColor('#68776e');pdf.text('Fictional sample. No payment is due.',14,288);pdf.text(`Page ${page} of ${pages}`,195,288,{align:'right'})}
  return new File([pdf.output('blob')],`${record.id}-SAMPLE.pdf`,{type:'application/pdf'})
 }
+
+export async function buildReceiptPdf(invoice,payment,config){
+ const {jsPDF}=await import('jspdf')
+ const co=invoice.workspace||config,region=REGIONS.find(r=>r[0]===co.region)||REGIONS[0]
+ const money=n=>new Intl.NumberFormat(region[3],{style:'currency',currency:payment.currency||invoice.currency||region[2]}).format(n)
+ const pdf=new jsPDF(),accent=co.accent||'#146e60'
+ pdf.setFillColor(accent);pdf.rect(0,0,210,6,'F')
+ pdf.setFont(co.theme==='classic'?'times':'helvetica');pdf.setTextColor(accent);pdf.setFontSize(20);pdf.text(co.name||'Your company',14,28)
+ pdf.setTextColor('#17231e');pdf.setFontSize(15);pdf.text('PAYMENT RECEIPT',14,43)
+ pdf.setFontSize(9);pdf.setTextColor('#68776e');pdf.text(`SAMPLE RECEIPT · ${payment.id.slice(0,12).toUpperCase()}`,14,51)
+ const rows=[['Received from',invoice.name],['Payment date',payment.date],['Amount received',money(payment.amount)],['Payment method',payment.method],['Reference',payment.reference||'—'],['Applied to invoice',invoice.id],['Invoice total',money(invoice.amount)],['Balance outstanding',money(invoice.balance??0)]]
+ let y=68
+ for(const [label,value] of rows){pdf.setTextColor('#68776e');pdf.text(label,14,y);pdf.setTextColor('#17231e');pdf.setFontSize(label==='Amount received'?14:10);pdf.text(String(value),70,y);pdf.setFontSize(9);y+=14;pdf.setDrawColor('#e2e8e4');pdf.line(14,y-8,196,y-8)}
+ if(co.vat_registered&&co.vat){pdf.setTextColor('#68776e');pdf.text(`Supplier VAT number: ${co.vat}`,14,y+4)}
+ pdf.setFontSize(9);pdf.setTextColor('#68776e');pdf.text('This receipt confirms that a payment was recorded against the invoice shown above.',14,260)
+ pdf.text('Fictional preview receipt · No bank transaction was performed.',14,288)
+ return new File([pdf.output('blob')],`${invoice.id}-${payment.date}-RECEIPT-SAMPLE.pdf`,{type:'application/pdf'})
+}

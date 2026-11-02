@@ -138,6 +138,10 @@ input,select,textarea{font-family:inherit;font-size:13px;}
 .mob-toggle{display:none;background:none;border:none;font-size:22px;color:#0D1F3C;cursor:pointer;}
 .sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:49;}
 .print-doc{position:relative;background:#fff;max-width:750px;margin:0 auto;padding:36px 44px;border:1px solid #E2E8F0;border-radius:8px;overflow:hidden;}
+.mobile-invoice-items{display:none;}
+.main,.content{min-width:0;}
+.print-doc{overflow-wrap:anywhere;}
+.doc-preview-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px;}
 .quick-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;}
 .mobile-nav,.mobile-doc-list{display:none;}
 .draft-watermark{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:0;pointer-events:none;font-size:86px;font-weight:900;letter-spacing:12px;color:rgba(148,163,184,.14);transform:rotate(-28deg);}
@@ -158,7 +162,19 @@ input,select,textarea{font-family:inherit;font-size:13px;}
   .modal{max-width:100%;margin:0;}
   .modal-bg{padding:8px;align-items:flex-end;overflow-y:hidden;}
   .modal{border-radius:14px 14px 0 0;max-height:90vh;max-height:90dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;}
-  .print-doc{padding:20px 16px;}
+  .print-doc{width:100%;max-width:100%;padding:18px 14px;overflow:hidden;}
+  .invoice-header{display:grid!important;grid-template-columns:1fr!important;gap:16px!important;margin-bottom:18px!important;padding-bottom:14px!important;}
+  .invoice-company{max-width:100%!important;}
+  .invoice-company img{max-width:180px!important;max-height:90px!important;}
+  .invoice-meta{text-align:left!important;}
+  .invoice-meta>div{justify-content:flex-start!important;}
+  .desktop-invoice-table{display:none;}
+  .mobile-invoice-items{display:grid;gap:8px;margin-bottom:14px;}
+  .mobile-invoice-item{border:1px solid #E2E8F0;border-radius:9px;padding:10px;background:#fff;}
+  .invoice-totals{width:100%!important;}
+  .invoice-notes{grid-template-columns:1fr!important;gap:12px!important;}
+  .doc-preview-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .doc-preview-actions .btn{width:100%;justify-content:center;}
   .topbar{padding:10px 14px;}
   .card,.card0{border-radius:10px;}
   .btn{font-size:12px;padding:8px 14px;}
@@ -182,6 +198,12 @@ input,select,textarea{font-family:inherit;font-size:13px;}
   .filter-bar{display:grid;grid-template-columns:1fr 1fr;}
   .filter-bar input{grid-column:1/-1;width:100%!important;}
   .filter-bar select{width:100%;}
+}
+@media print{
+  .desktop-invoice-table{display:table!important;}
+  .mobile-invoice-items{display:none!important;}
+  .invoice-header{display:flex!important;}
+  .main{padding-bottom:0!important;}
 }
 @media(max-width:400px){
   .stat-grid{grid-template-columns:1fr;}
@@ -521,23 +543,129 @@ function DocPrint({doc,company,onBack}){
   }
   const isMobileDevice=()=>typeof navigator!=='undefined'&&/iPhone|iPad|Android|Mobile/i.test(navigator.userAgent)
   const downloadPdf=async()=>{
-    if(!printRef.current||generating)return
+    if(generating)return
     setGenerating(true)
     try{
-      const [{default:jsPDF},{default:html2canvas}]=await Promise.all([import('jspdf'),import('html2canvas')])
-      const canvas=await html2canvas(printRef.current,{scale:2,useCORS:true,backgroundColor:'#ffffff'})
-      const imgData=canvas.toDataURL('image/png')
-      const pdf=new jsPDF({unit:'mm',format:'a4'})
-      const pageW=210,pageH=297,margin=8
-      const imgW=pageW-margin*2
-      const imgH=canvas.height*imgW/canvas.width
-      const contentH=pageH-margin*2
-      pdf.addImage(imgData,'PNG',margin,margin,imgW,imgH)
-      let heightLeft=imgH-contentH,page=1
-      while(heightLeft>0){
-        pdf.addPage()
-        pdf.addImage(imgData,'PNG',margin,margin-contentH*page,imgW,imgH)
-        heightLeft-=contentH;page++
+      const [{default:jsPDF},{default:autoTable}]=await Promise.all([import('jspdf'),import('jspdf-autotable')])
+      const pdf=new jsPDF({unit:'mm',format:'a4',orientation:'portrait'})
+      const pageW=210,pageH=297,margin=14,contentW=pageW-margin*2
+      const dark='#0D1F3C',muted='#475569',light='#F1F5F9',accent=dt.color||dark
+      let y=14
+
+      const addPage=()=>{pdf.addPage();y=16}
+      const ensureSpace=h=>{if(y+h>pageH-20)addPage()}
+
+      let logoBottom=14
+      if(company?.logo){
+        try{
+          const props=pdf.getImageProperties(company.logo)
+          const ratio=props.width/props.height
+          let logoW=44,logoH=logoW/ratio
+          if(logoH>22){logoH=22;logoW=logoH*ratio}
+          pdf.addImage(company.logo,props.fileType||'PNG',margin,y,logoW,logoH)
+          logoBottom=y+logoH+3
+        }catch(e){}
+      }
+      const companyY=Math.max(y,logoBottom)
+      pdf.setFont('helvetica','bold');pdf.setFontSize(14);pdf.setTextColor(dark)
+      pdf.text(company?.name||'',margin,companyY)
+      pdf.setFont('helvetica','normal');pdf.setFontSize(8);pdf.setTextColor(muted)
+      const companyDetails=[company?.trading_as?`t/a ${company.trading_as}`:'',company?.address,company?.phone,company?.email,company?.reg?`Reg: ${company.reg}`:'',vatReg&&company?.vat?`VAT Reg: ${company.vat}`:''].filter(Boolean).join('\n')
+      pdf.text(pdf.splitTextToSize(companyDetails,88),margin,companyY+5)
+
+      pdf.setFont('helvetica','bold');pdf.setFontSize(21);pdf.setTextColor(accent)
+      pdf.text(dt.label.toUpperCase(),pageW-margin,16,{align:'right'})
+      pdf.setFontSize(12);pdf.setTextColor(dark);pdf.text(doc.number||'',pageW-margin,23,{align:'right'})
+      pdf.setFont('helvetica','normal');pdf.setFontSize(8);pdf.setTextColor(muted)
+      const meta=[`Date: ${fmtDate(doc.date)}`,doc.due?`${doc.type==='quote'?'Valid until':'Due'}: ${fmtDate(doc.due)}`:'',doc.po_number?`PO #: ${doc.po_number}`:'',doc.ref?`Ref: ${doc.ref}`:''].filter(Boolean)
+      pdf.text(meta,pageW-margin,29,{align:'right',lineHeightFactor:1.45})
+
+      y=Math.max(companyY+Math.max(15,companyDetails.split('\n').length*4),29+meta.length*4)+4
+      pdf.setDrawColor(accent);pdf.setLineWidth(0.8);pdf.line(margin,y,pageW-margin,y);y+=7
+
+      const clientDetails=[doc.client_name,doc.client_address,vatReg&&doc.client_vat?`VAT: ${doc.client_vat}`:''].filter(Boolean).join('\n')
+      const clientLines=pdf.splitTextToSize(clientDetails,85)
+      const clientH=Math.max(18,clientLines.length*4+9)
+      pdf.setFillColor(light);pdf.roundedRect(margin,y,92,clientH,2,2,'F')
+      pdf.setFont('helvetica','bold');pdf.setFontSize(7);pdf.setTextColor(muted);pdf.text(doc.type==='delivery'?'DELIVER TO':'BILL TO',margin+4,y+5)
+      pdf.setFontSize(9);pdf.setTextColor(dark);pdf.text(clientLines,margin+4,y+11)
+      y+=clientH+7
+
+      const headers=['#','Description']
+      if(hasUnit)headers.push('Unit')
+      headers.push('Qty','Price')
+      if(hasDisc)headers.push('Disc')
+      if(vatReg)headers.push('VAT%')
+      headers.push('Amount')
+      const body=rows.map((it,i)=>{
+        const row=[String(i+1),it.desc||'']
+        if(hasUnit)row.push(it.unit||'')
+        row.push(String(it.qty??''),fmtMoney(it.rate,sym))
+        if(hasDisc)row.push(it.discount>0?`${it.discount}%`:'—')
+        if(vatReg)row.push(`${it.vatRate||0}%`)
+        row.push(fmtMoney(it.net,sym))
+        return row
+      })
+      autoTable(pdf,{
+        startY:y,head:[headers],body,theme:'grid',showHead:'everyPage',
+        margin:{left:margin,right:margin,bottom:20},
+        styles:{font:'helvetica',fontSize:7.8,cellPadding:2.3,textColor:'#1E293B',lineColor:'#E2E8F0',lineWidth:.2,overflow:'linebreak',valign:'middle'},
+        headStyles:{fillColor:accent,textColor:'#FFFFFF',fontStyle:'bold',fontSize:7.4},
+        alternateRowStyles:{fillColor:'#F8FAFC'},
+        columnStyles:{0:{cellWidth:9,halign:'center'},1:{cellWidth:'auto'},[headers.length-1]:{cellWidth:28,halign:'right'}},
+      })
+      y=(pdf.lastAutoTable?.finalY||y)+7
+
+      const totalsH=vatReg?25:14
+      ensureSpace(totalsH)
+      const totalsX=pageW-margin-72
+      if(vatReg){
+        pdf.setFont('helvetica','normal');pdf.setFontSize(8);pdf.setTextColor(muted)
+        pdf.text('Subtotal (excl. VAT)',totalsX,y);pdf.text(fmtMoney(tot.subtotal,sym),pageW-margin,y,{align:'right'});y+=5
+        pdf.text('VAT',totalsX,y);pdf.text(fmtMoney(tot.vat,sym),pageW-margin,y,{align:'right'});y+=6
+      }
+      pdf.setFillColor(accent);pdf.roundedRect(totalsX-2,y-4,74,11,1.5,1.5,'F')
+      pdf.setFont('helvetica','bold');pdf.setFontSize(8.5);pdf.setTextColor('#FFFFFF')
+      pdf.text(doc.type==='receipt'?'AMOUNT RECEIVED':'TOTAL DUE',totalsX+1,y+2)
+      pdf.text(fmtMoney(tot.total,sym),pageW-margin-2,y+2,{align:'right'});y+=13
+
+      if(doc.type!=='delivery'&&banking.length){
+        const bankText=banking.map((b,i)=>[
+          banking.length>1?`ACCOUNT ${i+1}`:'',b.bank&&`Bank: ${b.bank}`,b.accountName&&`Account name: ${b.accountName}`,b.accountNo&&`Account no: ${b.accountNo}`,b.accountType&&`Type: ${b.accountType}`,b.branchCode&&`Branch code: ${b.branchCode}`,b.swift&&`SWIFT: ${b.swift}`,b.reference&&`Reference: ${b.reference}`
+        ].filter(Boolean).join(' · ')).join('\n')
+        const bankLines=pdf.splitTextToSize(bankText,contentW-8)
+        const bankH=bankLines.length*4+12
+        ensureSpace(bankH)
+        pdf.setFillColor('#E8F1FB');pdf.roundedRect(margin,y,contentW,bankH,2,2,'F')
+        pdf.setFont('helvetica','bold');pdf.setFontSize(7);pdf.setTextColor('#1E6FD9');pdf.text('BANKING DETAILS',margin+4,y+5)
+        pdf.setFont('helvetica','normal');pdf.setFontSize(8);pdf.setTextColor(dark);pdf.text(bankLines,margin+4,y+11)
+        y+=bankH+6
+      }
+
+      const addTextBlock=(label,text)=>{
+        if(!text)return
+        pdf.setFont('helvetica','normal');pdf.setFontSize(8)
+        const lines=pdf.splitTextToSize(String(text),contentW)
+        ensureSpace(14)
+        pdf.setFont('helvetica','bold');pdf.setFontSize(7);pdf.setTextColor(muted);pdf.text(label.toUpperCase(),margin,y);y+=5
+        pdf.setFont('helvetica','normal');pdf.setFontSize(8);pdf.setTextColor(muted)
+        for(const line of lines){ensureSpace(5);pdf.text(line,margin,y);y+=4.2}
+        y+=5
+      }
+      addTextBlock('Notes',doc.notes)
+      addTextBlock('Terms & Conditions',doc.terms)
+
+      const pageCount=pdf.getNumberOfPages()
+      for(let p=1;p<=pageCount;p++){
+        pdf.setPage(p)
+        if(doc.status==='Draft'){
+          pdf.setFont('helvetica','bold');pdf.setFontSize(52);pdf.setTextColor('#E2E8F0')
+          pdf.text('DRAFT',105,150,{align:'center',angle:45})
+        }
+        pdf.setDrawColor('#E2E8F0');pdf.setLineWidth(.2);pdf.line(margin,pageH-13,pageW-margin,pageH-13)
+        pdf.setFont('helvetica','normal');pdf.setFontSize(7);pdf.setTextColor(muted)
+        pdf.text(`${company?.name||''}${company?.reg?` · Reg: ${company.reg}`:''}${vatReg&&company?.vat?` · VAT: ${company.vat}`:''}`,margin,pageH-8)
+        pdf.text(`Page ${p} of ${pageCount}`,pageW-margin,pageH-8,{align:'right'})
       }
       const safeNumber=(doc.number||'document').replace(/[^a-z0-9-_]/gi,'_')
       pdf.save(`${dt.label.replace(/\s+/g,'-')}-${safeNumber}.pdf`)
@@ -550,7 +678,7 @@ function DocPrint({doc,company,onBack}){
 
   return <div>
     <div className="no-print" style={{marginBottom:18}}>
-      <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center',marginBottom:10}}>
+      <div className="doc-preview-actions">
         <Btn v="p" onClick={()=>window.print()}>🖨 Print</Btn>
         <Btn v="ok" onClick={downloadPdf} disabled={generating}>{generating?'Generating…':'⬇ Download PDF'}</Btn>
         {isMobileDevice()
@@ -568,8 +696,8 @@ function DocPrint({doc,company,onBack}){
     </div>
     <div className="print-doc" ref={printRef}>
       {doc.status==='Draft'&&<div className="draft-watermark">DRAFT</div>}
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:26,paddingBottom:18,borderBottom:`3px solid ${dt.color}`}}>
-        <div style={{maxWidth:300}}>
+      <div className="invoice-header" style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:26,paddingBottom:18,borderBottom:`3px solid ${dt.color}`}}>
+        <div className="invoice-company" style={{maxWidth:300}}>
           {company?.logo&&<img src={company.logo} alt="" style={{maxHeight:200,maxWidth:300,objectFit:'contain',objectPosition:'left',marginBottom:14,display:'block'}}/>}
           <div style={{fontWeight:800,fontSize:17,color:T.navy}}>{company?.name}</div>
           {company?.trading_as&&<div style={{fontSize:12,color:T.grey600}}>t/a {company.trading_as}</div>}
@@ -583,7 +711,7 @@ function DocPrint({doc,company,onBack}){
             {vatReg&&company?.vat&&<div style={{fontWeight:700,color:T.navy}}>VAT Reg: {company.vat}</div>}
           </div>
         </div>
-        <div style={{textAlign:'right'}}>
+        <div className="invoice-meta" style={{textAlign:'right'}}>
           <div style={{fontSize:26,fontWeight:900,color:dt.color,textTransform:'uppercase',letterSpacing:'-.5px'}}>{dt.label}</div>
           <div style={{fontSize:16,fontWeight:800,color:T.navy,marginTop:3,display:'flex',alignItems:'center',justifyContent:'flex-end',gap:8}}>
             <span>{doc.number}</span>
@@ -603,7 +731,7 @@ function DocPrint({doc,company,onBack}){
         {doc.client_address&&<div style={{fontSize:12,color:T.grey600,marginTop:3,whiteSpace:'pre-line'}}>{doc.client_address}</div>}
         {vatReg&&doc.client_vat&&<div style={{fontSize:11,color:T.grey400,marginTop:3}}>VAT: {doc.client_vat}</div>}
       </div>
-      <table style={{width:'100%',borderCollapse:'collapse',marginBottom:16}}>
+      <table className="desktop-invoice-table" style={{width:'100%',borderCollapse:'collapse',marginBottom:16}}>
         <thead><tr style={{background:dt.color}}>
           <th style={{padding:'8px 8px',width:30,textAlign:'center',fontSize:11,fontWeight:700,color:'#fff',textTransform:'uppercase'}}>#</th>
           <th style={{padding:'8px 10px',textAlign:'left',fontSize:11,fontWeight:700,color:'#fff',textTransform:'uppercase'}}>Description</th>
@@ -629,8 +757,18 @@ function DocPrint({doc,company,onBack}){
           ))}
         </tbody>
       </table>
+      <div className="mobile-invoice-items">
+        {rows.map((it,i)=><div className="mobile-invoice-item" key={it.id}>
+          <div style={{fontSize:12,fontWeight:800,color:T.navy,lineHeight:1.45,whiteSpace:'pre-line'}}>{it.desc||`Item ${i+1}`}</div>
+          <div style={{display:'flex',justifyContent:'space-between',gap:10,marginTop:7,fontSize:11,color:T.grey600}}>
+            <span>{it.qty} × {fmtMoney(it.rate,sym)}{it.unit?` / ${it.unit}`:''}</span>
+            <strong style={{fontSize:12,color:T.navy,whiteSpace:'nowrap'}}>{fmtMoney(it.net,sym)}</strong>
+          </div>
+          {(it.discount>0||vatReg)&&<div style={{fontSize:10,color:T.grey400,marginTop:4}}>{it.discount>0?`Discount ${it.discount}%`:''}{it.discount>0&&vatReg?' · ':''}{vatReg?`VAT ${it.vatRate||0}%`:''}</div>}
+        </div>)}
+      </div>
       <div style={{display:'flex',justifyContent:'flex-end',marginBottom:20}}>
-        <div style={{width:250}}>
+        <div className="invoice-totals" style={{width:250}}>
           {vatReg&&<>
             <div style={{display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:`1px solid ${T.grey100}`,fontSize:12}}><span style={{color:T.grey600}}>Subtotal (excl. VAT)</span><span>{fmtMoney(tot.subtotal,sym)}</span></div>
             <div style={{display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:`1px solid ${T.grey100}`,fontSize:12}}><span style={{color:T.grey600}}>VAT (15%)</span><span>{fmtMoney(tot.vat,sym)}</span></div>
@@ -660,7 +798,7 @@ function DocPrint({doc,company,onBack}){
         </div>
       )}
       {(doc.notes||doc.terms)&&(
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:18,marginBottom:14}}>
+        <div className="invoice-notes" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:18,marginBottom:14}}>
           {doc.notes&&<div><div style={{fontSize:10,fontWeight:800,color:'#374151',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:3}}>Notes</div><div style={{fontSize:11,color:T.grey600,lineHeight:1.6}}>{doc.notes}</div></div>}
           {doc.terms&&<div><div style={{fontSize:10,fontWeight:800,color:'#374151',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:3}}>Terms &amp; Conditions</div><div style={{fontSize:11,color:T.grey600,lineHeight:1.7,whiteSpace:'pre-line'}}>{doc.terms}</div></div>}
         </div>

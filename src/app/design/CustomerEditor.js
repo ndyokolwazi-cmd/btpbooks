@@ -1,0 +1,7 @@
+'use client'
+import {useState} from 'react'
+export default function CustomerEditor({initial,onSave,onClose}){
+ const [form,setForm]=useState(initial||{name:'',email:'',phone:'',address:'',vat:'',notes:''}),[error,setError]=useState('')
+ const save=()=>{if(!form.name.trim()){setError('Enter a customer name.');return}if(form.email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)){setError('Enter a valid email address.');return}try{onSave({...form,id:form.id||crypto.randomUUID(),name:form.name.trim()})}catch(e){setError('Could not save the customer on this device. Check browser storage and try again.')}}
+ return <div className="overlay"><section className="sheet" role="dialog" aria-modal="true" aria-label="Customer details"><div className="sheethead"><h2>{initial?'Edit customer':'New customer'}</h2><button className="iconbtn" onClick={onClose} aria-label="Close customer editor">×</button></div><p className="sub">Sample contact · Saved on this device</p>{[['name','Name / business name'],['email','Email'],['phone','Phone'],['address','Billing address'],['vat','VAT number (optional)'],['notes','Internal notes']].map(([key,label])=><label className="formfield" key={key}>{label}<input value={form[key]||''} type={key==='email'?'email':key==='phone'?'tel':'text'} maxLength={key==='address'||key==='notes'?500:120} onChange={e=>setForm(f=>({...f,[key]:e.target.value}))}/></label>)}{error&&<p role="status" className="status">{error}</p>}<button className="primary" onClick={save}>Save customer</button></section></div>
+}

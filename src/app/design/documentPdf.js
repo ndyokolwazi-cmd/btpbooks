@@ -12,7 +12,7 @@ export async function buildDocumentPdf(record,config){
  const accent=co.accent||'#146e60'
  if(co.theme==='modern'){pdf.setFillColor(accent);pdf.rect(0,0,210,5,'F')}
  if(co.theme==='bold'){pdf.setFillColor(accent);pdf.rect(0,0,5,297,'F')}
- pdf.setFontSize(9);pdf.setTextColor('#68776e');pdf.text('SAMPLE DOCUMENT - DRAFT / PREVIEW',14,16)
+ pdf.setFontSize(9);pdf.setTextColor('#68776e');pdf.text(`SAMPLE DOCUMENT - ${(record.status||'Draft').toUpperCase()}`,14,16)
  pdf.setFontSize(18);pdf.setTextColor(accent);pdf.text(pdf.splitTextToSize(co.name,180),14,28)
  pdf.setFontSize(11);pdf.text(`${label}  ${record.id}`,14,43)
  let y=52
@@ -28,7 +28,7 @@ export async function buildDocumentPdf(record,config){
   y+=5
  }
  block('CUSTOMER',[record.name,record.customer?.address,record.customer?.email,record.customer?.phone,record.customer?.vat?`Customer VAT: ${record.customer.vat}`:''].filter(Boolean).join('\n'))
- block('DOCUMENT DETAILS',[record.rentalPeriod?`Rental period: ${record.rentalPeriod}`:'',record.date?`Issued: ${record.date}`:'',record.due?`${quote?'Valid until':'Due'}: ${record.due}`:'',co.vat_registered?`Supplier VAT: ${co.vat}`:''].filter(Boolean).join('\n'))
+ block('DOCUMENT DETAILS',[record.sourceQuote?`Quotation reference: ${record.sourceQuote}`:'',record.rentalPeriod?`Rental period: ${record.rentalPeriod}`:'',record.date?`Issued: ${record.date}`:'',record.due?`${quote?'Valid until':'Due'}: ${record.due}`:'',co.vat_registered?`Supplier VAT: ${co.vat}`:''].filter(Boolean).join('\n'))
  const headers=['Description','Qty','Unit price','Disc %',...(co.vat_registered?['VAT %']:[]),'Amount excl. VAT']
  autoTable(pdf,{startY:y,margin:{left:14,right:14,bottom:20},head:[headers],body:totals.rows.map(i=>[i.desc,String(i.qty),money(i.rate),`${i.discount||0}%`,...(co.vat_registered?[`${i.vatRate||0}%`]:[]),money(i.net)]),showHead:'everyPage',rowPageBreak:'avoid',styles:{font:co.theme==='classic'?'times':'helvetica',fontSize:9,cellPadding:3,overflow:'linebreak'},headStyles:{fillColor:accent},columnStyles:{0:{cellWidth:'auto'}}})
  y=pdf.lastAutoTable.finalY+10

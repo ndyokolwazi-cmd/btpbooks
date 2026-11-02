@@ -28,7 +28,7 @@ export async function buildDocumentPdf(record,config){
   y+=5
  }
  block('CUSTOMER',[record.name,record.customer?.address,record.customer?.email,record.customer?.phone,record.customer?.vat?`Customer VAT: ${record.customer.vat}`:''].filter(Boolean).join('\n'))
- block('DOCUMENT DETAILS',[record.date?`Issued: ${record.date}`:'',record.due?`${quote?'Valid until':'Due'}: ${record.due}`:'',co.vat_registered?`Supplier VAT: ${co.vat}`:''].filter(Boolean).join('\n'))
+ block('DOCUMENT DETAILS',[record.rentalPeriod?`Rental period: ${record.rentalPeriod}`:'',record.date?`Issued: ${record.date}`:'',record.due?`${quote?'Valid until':'Due'}: ${record.due}`:'',co.vat_registered?`Supplier VAT: ${co.vat}`:''].filter(Boolean).join('\n'))
  const headers=['Description','Qty','Unit price','Disc %',...(co.vat_registered?['VAT %']:[]),'Amount excl. VAT']
  autoTable(pdf,{startY:y,margin:{left:14,right:14,bottom:20},head:[headers],body:totals.rows.map(i=>[i.desc,String(i.qty),money(i.rate),`${i.discount||0}%`,...(co.vat_registered?[`${i.vatRate||0}%`]:[]),money(i.net)]),showHead:'everyPage',rowPageBreak:'avoid',styles:{font:co.theme==='classic'?'times':'helvetica',fontSize:9,cellPadding:3,overflow:'linebreak'},headStyles:{fillColor:accent},columnStyles:{0:{cellWidth:'auto'}}})
  y=pdf.lastAutoTable.finalY+10

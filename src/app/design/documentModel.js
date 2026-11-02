@@ -1,5 +1,23 @@
 export const localDate=()=>new Date().toLocaleDateString('en-CA')
 const cents=n=>Math.round((n+Number.EPSILON)*100)
+export function nextRentalMonth(period){
+ const [year,month]=period.split('-').map(Number)
+ const next=new Date(Date.UTC(year,month,1))
+ return `${next.getUTCFullYear()}-${String(next.getUTCMonth()+1).padStart(2,'0')}`
+}
+export function repeatDocument(source,config,client){
+ const rental=config.industry==='rental'
+ const period=rental?nextRentalMonth(source.rentalPeriod||(source.date||localDate()).slice(0,7)):''
+ const date=rental?`${period}-01`:localDate()
+ const oldGap=source.date&&source.due?Math.max(0,Math.round((new Date(source.due+'T00:00:00Z')-new Date(source.date+'T00:00:00Z'))/86400000)):0
+ let due=date
+ if(rental){
+  const [year,month]=period.split('-').map(Number)
+  const day=Math.min(Number(source.due?.slice(8,10))||1,new Date(Date.UTC(year,month,0)).getUTCDate())
+  due=`${period}-${String(day).padStart(2,'0')}`
+ }else{due=new Date(new Date(date+'T00:00:00Z').getTime()+oldGap*86400000).toISOString().slice(0,10)}
+ return {documentType:source.id?.startsWith('QUO')?'Quotation':'Invoice',name:client?.name||source.name,customer:{...source.customer,...client,name:client?.name||source.name},items:(source.items||[{desc:source.detail||'Monthly rent',qty:1,rate:source.amount,discount:0,vatRate:0}]).map(item=>({...item,id:crypto.randomUUID()})),date,due,rentalPeriod:period,terms:source.terms??config.terms,notes:source.notes||'',workspace:{...source.workspace,...config,region:source.workspace?.region||config.region,vat_registered:source.workspace?.vat_registered||false,vat:source.workspace?.vat||''},currency:source.currency,repeatFrom:source.id}
+}
 export function calculateItems(items,vatRegistered=false){
  let subtotal=0,vat=0,discount=0
  const rows=items.map(item=>{
@@ -14,6 +32,7 @@ export function calculateItems(items,vatRegistered=false){
 }
 export function documentError(record){
  if(!record.name?.trim())return 'Enter a customer name.'
+ if(record.workspace?.industry==='rental'&&!/^\d{4}-(0[1-9]|1[0-2])$/.test(record.rentalPeriod||''))return 'Choose the rental billing month.'
  if(record.customer?.email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(record.customer.email))return 'Enter a valid customer email address.'
  if(!record.date||!record.due)return 'Choose an issue date and due / valid-until date.'
  if(record.due<record.date)return 'The due / valid-until date cannot precede the issue date.'

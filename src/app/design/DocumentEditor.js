@@ -1,35 +1,53 @@
 'use client'
 import {useState} from 'react'
 import {REGIONS} from './BusinessSetup'
-import {calculateItems,documentError,localDate} from './documentModel'
+import {calculateItems,documentError,localDate,repeatDocument} from './documentModel'
 
-export default function DocumentEditor({initial,config,client,documentType='Invoice',onClose,onReview,onSave,message}){
+export default function DocumentEditor({initial,config,client,clients=[],documents=[],documentType='Invoice',onClose,onReview,onSave,message}){
  const workspace=initial?.workspace||config
  const region=REGIONS.find(r=>r[0]===workspace.region)||REGIONS[0]
- const [kind,setKind]=useState(initial?.id?.startsWith('QUO')?'Quotation':documentType)
+ const [kind,setKind]=useState(initial?.id?.startsWith('QUO')?'Quotation':initial?.documentType||documentType)
  const [id]=useState(initial?.id||crypto.randomUUID().slice(0,8).toUpperCase())
  const [name,setName]=useState(initial?.name||client?.name||'')
  const [contact,setContact]=useState(initial?.customer||client||{email:'',phone:'',address:'',vat:''})
  const [date,setDate]=useState(initial?.date||localDate()),[due,setDue]=useState(initial?.due||localDate())
  const [terms,setTerms]=useState(initial?.terms??workspace.terms??''),[notes,setNotes]=useState(initial?.notes||'')
+ const [rentalPeriod,setRentalPeriod]=useState(initial?.rentalPeriod||(config.industry==='rental'?localDate().slice(0,7):'')),[repeatFrom,setRepeatFrom]=useState(initial?.repeatFrom||'')
  const [vatRegistered,setVatRegistered]=useState(!!workspace.vat_registered),[vatNumber,setVatNumber]=useState(workspace.vat||'')
  const [items,setItems]=useState(initial?.items||[{id:crypto.randomUUID(),desc:initial?.detail||'',qty:1,rate:initial?.amount||'',discount:0,vatRate:15}])
  const [error,setError]=useState('')
  const totals=calculateItems(items,vatRegistered)
  const money=n=>new Intl.NumberFormat(region[3],{style:'currency',currency:region[2]}).format(n)
  const update=(id,key,value)=>setItems(all=>all.map(item=>item.id===id?{...item,[key]:value}:item))
+ const previous=documents.find(d=>(!d.currency||d.currency===region[2])&&d.name?.trim().toLowerCase()===name.trim().toLowerCase()&&(kind==='Quotation'?d.id.startsWith('QUO'):!d.id.startsWith('QUO')))
+ const usePrevious=(doc,person)=>{
+  const copy=repeatDocument(doc,config,person||contact)
+  setItems(copy.items);setDate(copy.date);setDue(copy.due);setRentalPeriod(copy.rentalPeriod);setTerms(copy.terms);setNotes(copy.notes);setRepeatFrom(copy.repeatFrom)
+  setVatRegistered(!!copy.workspace.vat_registered);setVatNumber(copy.workspace.vat||'')
+ }
+ const chooseClient=value=>{
+  const person=clients[Number(value)]
+  if(!person)return
+  setName(person.name);setContact({...person});setRepeatFrom('')
+  const prior=documents.find(d=>(!d.currency||d.currency===region[2])&&d.name?.trim().toLowerCase()===person.name.trim().toLowerCase()&&!d.id.startsWith('QUO'))
+  if(config.industry==='rental'&&kind==='Invoice'&&!initial?.id&&prior&&items.every(i=>!i.desc.trim()))usePrevious(prior,person)
+ }
  const submit=review=>{
   const snapshot={...workspace,vat_registered:vatRegistered,vat:vatNumber}
-  const record={...initial,id:initial?.id||`${kind==='Quotation'?'QUO':'INV'}-DEMO-${id}`,name:name.trim(),customer:{...contact,name:name.trim()},date,due,terms,notes,items:items.map(i=>({...i,qty:Number(i.qty),rate:Number(i.rate),discount:Number(i.discount),vatRate:Number(i.vatRate)})),amount:totals.total,totals,workspace:snapshot,currency:region[2],detail:`${items[0]?.desc||'Services'} · ${kind}`,status:'Draft',editable:true}
+  const record={...initial,id:initial?.id||`${kind==='Quotation'?'QUO':'INV'}-DEMO-${id}`,name:name.trim(),customer:{...contact,name:name.trim()},date,due,rentalPeriod,repeatFrom,terms,notes,items:items.map(i=>({...i,qty:Number(i.qty),rate:Number(i.rate),discount:Number(i.discount),vatRate:Number(i.vatRate)})),amount:totals.total,totals,workspace:snapshot,currency:region[2],detail:`${items[0]?.desc||'Services'} · ${kind}`,status:'Draft',editable:true}
   const problem=documentError(record)
   if(problem){setError(problem);return}
   setError('');review?onReview(record):onSave(record)
  }
- return <div className="overlay"><section className="sheet" role="dialog" aria-modal="true" aria-label="Document editor"><div className="sheethead"><h2>{initial?'Edit draft':'New document'}</h2><button className="iconbtn" aria-label="Close editor" onClick={onClose}>×</button></div><p className="sub">Sample draft · Prices exclude VAT · Saved on this device</p>
- <label className="formfield">Document type<select value={kind} disabled={!!initial} onChange={e=>setKind(e.target.value)}><option>Invoice</option><option>Quotation</option></select></label>
+ return <div className="overlay"><section className="sheet" role="dialog" aria-modal="true" aria-label="Document editor"><div className="sheethead"><h2>{initial?.id?'Edit draft':'New document'}</h2><button className="iconbtn" aria-label="Close editor" onClick={onClose}>×</button></div><p className="sub">Sample draft · Prices exclude VAT · Saved on this device</p>
+ <label className="formfield">Document type<select value={kind} disabled={!!initial?.id} onChange={e=>setKind(e.target.value)}><option>Invoice</option><option>Quotation</option></select></label>
+ <label className="formfield">Choose saved {config.industry==='rental'?'tenant':'customer'}<select value={clients.findIndex(c=>c.name===name)} onChange={e=>chooseClient(e.target.value)}><option value={-1}>Select a customer or enter a name below</option>{clients.map((person,index)=><option key={person.id||person.name} value={index}>{person.name}</option>)}</select></label>
+ {!initial?.id&&previous&&<button className="secondary" onClick={()=>usePrevious(previous)}>Use last {kind.toLowerCase()} · {previous.id}</button>}
+ {repeatFrom&&<p role="status" className="status">Prefilled from {repeatFrom}. Review the billing month, dates and amounts before saving. A new document number will be assigned.</p>}
  <label className="formfield">Customer / tenant name<input value={name} onChange={e=>setName(e.target.value)} maxLength={120}/></label>
  {['email','phone','address','vat'].map(key=><label className="formfield" key={key}>{({email:'Customer email',phone:'Phone',address:'Billing address',vat:'Customer VAT number (optional)'})[key]}<input type={key==='email'?'email':key==='phone'?'tel':'text'} value={contact[key]||''} maxLength={key==='address'?300:120} onChange={e=>setContact(c=>({...c,[key]:e.target.value}))}/></label>)}
  <div className="sectiongrid"><label className="formfield">Issue date<input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><label className="formfield">{kind==='Quotation'?'Valid until':'Due date'}<input type="date" value={due} min={date} onChange={e=>setDue(e.target.value)}/></label></div>
+ {config.industry==='rental'&&<label className="formfield">Rental billing month<input type="month" value={rentalPeriod} onChange={e=>{const value=e.target.value;setRentalPeriod(value);if(value){const [year,month]=value.split('-').map(Number);const day=Math.min(Number(due.slice(8,10))||1,new Date(Date.UTC(year,month,0)).getUTCDate());setDate(`${value}-01`);setDue(`${value}-${String(day).padStart(2,'0')}`)}}}/></label>}
  {region[0]==='ZA'&&<label style={{display:'flex',gap:10,alignItems:'center',margin:'16px 0'}}><input type="checkbox" checked={vatRegistered} onChange={e=>setVatRegistered(e.target.checked)}/>Supplier is VAT registered (sample)</label>}
  {vatRegistered&&<label className="formfield">Supplier VAT registration number<input value={vatNumber} onChange={e=>setVatNumber(e.target.value)} maxLength={30}/></label>}
  <h3 style={{fontSize:16,marginTop:20}}>Line items · {region[2]}</h3>

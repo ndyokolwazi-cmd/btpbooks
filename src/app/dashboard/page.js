@@ -18,6 +18,7 @@ const DOC_TYPES = [
   {key:'receipt',label:'Receipt',prefix:'REC',color:T.green},
 ]
 const DT = Object.fromEntries(DOC_TYPES.map(t=>[t.key,t]))
+const docLabel=(type,company)=>type==='invoice'&&!company?.vat_registered?'Invoice':DT[type]?.label||'Document'
 const SM = {
   Draft:{bg:T.grey100,fg:T.grey600},Sent:{bg:T.blueLt,fg:T.blue},
   Accepted:{bg:T.greenLt,fg:T.green},Paid:{bg:T.greenLt,fg:T.green},
@@ -136,13 +137,20 @@ input,select,textarea{font-family:inherit;font-size:13px;}
 @keyframes spin{to{transform:rotate(360deg);}}
 .mob-toggle{display:none;background:none;border:none;font-size:22px;color:#0D1F3C;cursor:pointer;}
 .sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:49;}
-.print-doc{background:#fff;max-width:750px;margin:0 auto;padding:36px 44px;border:1px solid #E2E8F0;border-radius:8px;}
+.print-doc{position:relative;background:#fff;max-width:750px;margin:0 auto;padding:36px 44px;border:1px solid #E2E8F0;border-radius:8px;overflow:hidden;}
+.mobile-invoice-items{display:none;}
+.main,.content{min-width:0;}
+.print-doc{overflow-wrap:anywhere;}
+.doc-preview-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px;}
 .quick-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;}
+.mobile-nav,.mobile-doc-list{display:none;}
+.draft-watermark{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:0;pointer-events:none;font-size:86px;font-weight:900;letter-spacing:12px;color:rgba(148,163,184,.14);transform:rotate(-28deg);}
+.print-doc>*:not(.draft-watermark){position:relative;z-index:1;}
 @media print{.no-print{display:none!important;}.sidebar,.modal-bg{display:none!important;}.main{margin-left:0!important;}body{background:#fff;}@page{margin:10mm;size:A4;}html{-webkit-print-color-adjust:exact;print-color-adjust:exact;}.print-doc{padding:0!important;border:none!important;max-width:100%!important;}.print-doc table{page-break-inside:auto;}.print-doc tr{page-break-inside:avoid;}.print-doc thead{display:table-header-group;}}
 @media(max-width:768px){
   .sidebar{transform:translateX(-230px);}
   .sidebar.open{transform:translateX(0);}
-  .main{margin-left:0;}
+  .main{margin-left:0;padding-bottom:82px;}
   .mob-toggle{display:block;}
   .sb-overlay.show{display:block;}
   .g2{grid-template-columns:1fr;}
@@ -154,7 +162,19 @@ input,select,textarea{font-family:inherit;font-size:13px;}
   .modal{max-width:100%;margin:0;}
   .modal-bg{padding:8px;align-items:flex-end;overflow-y:hidden;}
   .modal{border-radius:14px 14px 0 0;max-height:90vh;max-height:90dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;}
-  .print-doc{padding:20px 16px;}
+  .print-doc{width:100%;max-width:100%;padding:18px 14px;overflow:hidden;}
+  .invoice-header{display:grid!important;grid-template-columns:1fr!important;gap:16px!important;margin-bottom:18px!important;padding-bottom:14px!important;}
+  .invoice-company{max-width:100%!important;}
+  .invoice-company img{max-width:180px!important;max-height:90px!important;}
+  .invoice-meta{text-align:left!important;}
+  .invoice-meta>div{justify-content:flex-start!important;}
+  .desktop-invoice-table{display:none;}
+  .mobile-invoice-items{display:grid;gap:8px;margin-bottom:14px;}
+  .mobile-invoice-item{border:1px solid #E2E8F0;border-radius:9px;padding:10px;background:#fff;}
+  .invoice-totals{width:100%!important;}
+  .invoice-notes{grid-template-columns:1fr!important;gap:12px!important;}
+  .doc-preview-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .doc-preview-actions .btn{width:100%;justify-content:center;}
   .topbar{padding:10px 14px;}
   .card,.card0{border-radius:10px;}
   .btn{font-size:12px;padding:8px 14px;}
@@ -164,6 +184,26 @@ input,select,textarea{font-family:inherit;font-size:13px;}
   .stat-grid .stat-val{font-size:18px!important;}
   table{font-size:12px;}
   .cl-grid,.co-grid{grid-template-columns:1fr;}
+  .desktop-doc-table{display:none;}
+  .mobile-doc-list{display:grid;gap:10px;}
+  .mobile-doc-card{background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:14px;}
+  .mobile-doc-actions{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-top:12px;padding-top:12px;border-top:1px solid #E2E8F0;}
+  .mobile-doc-actions .btn{justify-content:center;}
+  .mobile-nav{position:fixed;display:grid;grid-template-columns:repeat(5,1fr);left:0;right:0;bottom:0;z-index:80;background:#fff;border-top:1px solid #E2E8F0;padding:7px 6px calc(7px + env(safe-area-inset-bottom));box-shadow:0 -8px 24px rgba(15,23,42,.08);}
+  .mobile-nav button{border:0;background:transparent;color:#64748B;font-size:10px;font-weight:700;padding:4px 2px;display:flex;flex-direction:column;align-items:center;gap:3px;}
+  .mobile-nav button.active{color:#1E6FD9;}
+  .mobile-nav .new-action{width:46px;height:46px;border-radius:15px;background:#1E6FD9;color:#fff;margin:-20px auto 0;box-shadow:0 7px 18px rgba(30,111,217,.35);justify-content:center;font-size:20px;}
+  .mobile-nav .new-label{font-size:10px;color:#1E6FD9;margin-top:2px;}
+  .doc-create-actions{display:none!important;}
+  .filter-bar{display:grid;grid-template-columns:1fr 1fr;}
+  .filter-bar input{grid-column:1/-1;width:100%!important;}
+  .filter-bar select{width:100%;}
+}
+@media print{
+  .desktop-invoice-table{display:table!important;}
+  .mobile-invoice-items{display:none!important;}
+  .invoice-header{display:flex!important;}
+  .main{padding-bottom:0!important;}
 }
 @media(max-width:400px){
   .stat-grid{grid-template-columns:1fr;}
@@ -199,6 +239,17 @@ function Toast({msg,onDone}){
   return <div className="toast">✓ {msg}</div>
 }
 
+function MobileNav({page,setPage,onNew}){
+  const item=(id,icon,label)=><button className={page===id?'active':''} onClick={()=>setPage(id)}><span style={{fontSize:18}}>{icon}</span>{label}</button>
+  return <nav className="mobile-nav no-print" aria-label="Mobile navigation">
+    {item('dashboard','⌂','Home')}
+    {item('documents','▤','Documents')}
+    <button onClick={onNew} aria-label="Create a new invoice"><span className="new-action">＋</span><span className="new-label">New</span></button>
+    {item('clients','♟','Clients')}
+    {item('companies','•••','More')}
+  </nav>
+}
+
 // Get company accent colour
 const coColor=(co)=>co?.accent_color||T.navy
 
@@ -212,7 +263,7 @@ function Sidebar({page,setPage,companies,activeCoId,setActiveCoId,user,onSignOut
     <div className={`sb-overlay${open?' show':''}`} onClick={()=>setOpen(false)}/>
     <div className={`sidebar${open?' open':''}`}>
       <div className="sb-brand">
-        <h1>Inv<span>o</span>xa</h1>
+        <h1>My<span>Invox</span></h1>
         <p>Business Document Manager</p>
       </div>
       <div className="sb-sec">
@@ -249,7 +300,8 @@ function DashboardView({docs,company,setPage,setNewDocType}){
   const inv=my.filter(d=>d.type==='invoice')
   const sym=company?.currency_symbol||'R'
   const ac=coColor(company)
-  const totalInv=inv.reduce((s,d)=>s+(d.totals?.total||0),0)
+  const issued=inv.filter(d=>!['Draft','Cancelled'].includes(d.status))
+  const totalInv=issued.reduce((s,d)=>s+(d.totals?.total||0),0)
   const paid=inv.filter(d=>d.status==='Paid').reduce((s,d)=>s+(d.totals?.total||0),0)
   const outstanding=inv.filter(d=>['Sent','Overdue'].includes(d.status)).reduce((s,d)=>s+(d.totals?.total||0),0)
   const overdue=inv.filter(d=>d.status==='Overdue')
@@ -264,11 +316,11 @@ function DashboardView({docs,company,setPage,setNewDocType}){
 
   return <div>
     <h1 style={{fontSize:26,fontWeight:900,color:T.navy,marginBottom:4}}>{company?.name||'Dashboard'}</h1>
-    <p style={{fontSize:13,color:T.grey600,marginBottom:24}}>{fmtDate(today())}</p>
+    <p style={{fontSize:13,color:T.grey600,marginBottom:24}}>{fmtDate(today())} · All issued records</p>
     <div className="stat-grid">
       {[
         {l:'Total Invoiced',v:fmtMoney(totalInv,sym),c:ac,i:'📊'},
-        {l:'Collected',v:fmtMoney(paid,sym),c:T.green,i:'✅'},
+        {l:'Marked Paid',v:fmtMoney(paid,sym),c:T.green,i:'✅'},
         {l:'Outstanding',v:fmtMoney(outstanding,sym),c:T.blue,i:'⏳'},
         {l:'Overdue',v:`${overdue.length} invoice${overdue.length!==1?'s':''}`,c:T.red,i:'⚠️'},
       ].map(s=>(
@@ -287,7 +339,7 @@ function DashboardView({docs,company,setPage,setNewDocType}){
             <button key={t.key} className="btn btn-s" style={{justifyContent:'flex-start',gap:8,fontSize:12}}
               onClick={()=>{setNewDocType(t.key);setPage('documents')}}>
               <span style={{width:8,height:8,borderRadius:'50%',background:t.key==='invoice'?ac:t.color,flexShrink:0,display:'inline-block'}}/>
-              {t.label}
+              {docLabel(t.key,company)}
             </button>
           ))}
         </div>
@@ -320,7 +372,7 @@ function DashboardView({docs,company,setPage,setNewDocType}){
             {recent.map(d=>(
               <tr key={d.id}>
                 <td style={{fontWeight:700,color:T.navy}}>{d.number}</td>
-                <td><span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:10,background:(d.type==='invoice'?ac:DT[d.type]?.color||T.navy)+'22',color:d.type==='invoice'?ac:DT[d.type]?.color||T.navy}}>{DT[d.type]?.label}</span></td>
+                <td><span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:10,background:(d.type==='invoice'?ac:DT[d.type]?.color||T.navy)+'22',color:d.type==='invoice'?ac:DT[d.type]?.color||T.navy}}>{docLabel(d.type,company)}</span></td>
                 <td>{d.client_name}</td>
                 <td style={{color:T.grey600,whiteSpace:'nowrap'}}>{fmtDate(d.date)}</td>
                 <td style={{fontWeight:700}}>{fmtMoney(d.totals?.total,sym)}</td>
@@ -380,7 +432,7 @@ function LineItems({items,setItems,vatReg,sym}){
       </>}
       <div style={{height:1,background:T.grey200,margin:'8px 0'}}/>
       <div style={{display:'flex',justifyContent:'space-between',fontSize:13,fontWeight:800,color:T.navy}}>
-        <span>TOTAL DUE{vatReg?'':' (VAT Incl.)'}</span><span>{fmtMoney(tots.total,sym)}</span>
+        <span>TOTAL DUE</span><span>{fmtMoney(tots.total,sym)}</span>
       </div>
     </div>
   </div>
@@ -406,7 +458,7 @@ const QUOTE_TC = `1. VALIDITY: This quotation is valid for 30 days from the date
 
 // ── Doc Form ───────────────────────────────────────────────────────────────────
 function DocForm({doc,company,clients,docType,onSave,onClose,onConvertQuote}){
-  const dt=DT[docType]||DT.invoice
+  const dt={...(DT[docType]||DT.invoice),label:docLabel(docType,company)}
   const defaultTerms = docType==='invoice'
     ? 'Payment due within 30 days. EFT preferred. Overdue accounts attract interest at 2% per month.'
     : docType==='quote'
@@ -457,8 +509,11 @@ function DocForm({doc,company,clients,docType,onSave,onClose,onConvertQuote}){
 function DocPrint({doc,company,onBack}){
   const printRef=useRef(null)
   const [generating,setGenerating]=useState(false)
+  const [preparedPdf,setPreparedPdf]=useState(null)
+  const [pdfError,setPdfError]=useState('')
+  const [shareNotice,setShareNotice]=useState('')
   const ac=coColor(company)
-  const dt={...DT[doc.type]||DT.invoice,color:doc.type==='invoice'?ac:DT[doc.type]?.color||T.navy}
+  const dt={...(DT[doc.type]||DT.invoice),label:docLabel(doc.type,company),color:doc.type==='invoice'?ac:DT[doc.type]?.color||T.navy}
   const sym=company?.currency_symbol||'R'
   const vatReg=company?.vat_registered
   const banking=(company?.banking||[]).filter(b=>b.bank)
@@ -477,68 +532,183 @@ function DocPrint({doc,company,onBack}){
     const body=`Dear ${doc.client_name},\n\nPlease find ${dt.label} ${doc.number} attached.\n\nAmount: ${sym} ${Number(tot.total).toFixed(2)}${doc.due?`\nDue Date: ${fmtDate(doc.due)}`:''}\nReference: ${doc.number}\n\nBanking Details:\n${banking.map(b=>`Bank: ${b.bank}\nAccount Name: ${b.accountName}\nAccount No: ${b.accountNo}\nBranch Code: ${b.branchCode}`).join('\n')}\n\nKind regards,\n${company?.name}`
     window.open(`mailto:?subject=${encodeURIComponent(sub)}&body=${encodeURIComponent(body)}`)
   }
-  const share=async()=>{
-    if(navigator.share){
-      try{
-        await navigator.share({
-          title:`${dt.label} ${doc.number}`,
-          text:`${dt.label} ${doc.number} from ${company?.name} for ${sym} ${Number(tot.total).toFixed(2)}${doc.due?` due ${fmtDate(doc.due)}`:''}. Ref: ${doc.number}.`,
-        })
-      }catch(e){}
-    } else {
-      whatsapp()
-    }
-  }
-  const isMobileDevice=()=>typeof navigator!=='undefined'&&/iPhone|iPad|Android|Mobile/i.test(navigator.userAgent)
-  const downloadPdf=async()=>{
-    if(!printRef.current||generating)return
-    setGenerating(true)
-    try{
-      const [{default:jsPDF},{default:html2canvas}]=await Promise.all([import('jspdf'),import('html2canvas')])
-      const canvas=await html2canvas(printRef.current,{scale:2,useCORS:true,backgroundColor:'#ffffff'})
-      const imgData=canvas.toDataURL('image/png')
-      const pdf=new jsPDF({unit:'mm',format:'a4'})
-      const pageW=210,pageH=297,margin=8
-      const imgW=pageW-margin*2
-      const imgH=canvas.height*imgW/canvas.width
-      const contentH=pageH-margin*2
-      pdf.addImage(imgData,'PNG',margin,margin,imgW,imgH)
-      let heightLeft=imgH-contentH,page=1
-      while(heightLeft>0){
-        pdf.addPage()
-        pdf.addImage(imgData,'PNG',margin,margin-contentH*page,imgW,imgH)
-        heightLeft-=contentH;page++
+  const buildPdf=async()=>{
+      const [{default:jsPDF},{default:autoTable}]=await Promise.all([import('jspdf'),import('jspdf-autotable')])
+      const pdf=new jsPDF({unit:'mm',format:'a4',orientation:'portrait'})
+      const pageW=210,pageH=297,margin=14,contentW=pageW-margin*2
+      const dark='#0D1F3C',muted='#475569',light='#F1F5F9',accent=dt.color||dark
+      let y=14
+
+      const addPage=()=>{pdf.addPage();y=16}
+      const ensureSpace=h=>{if(y+h>pageH-20)addPage()}
+
+      let logoBottom=14
+      if(company?.logo){
+        try{
+          const props=pdf.getImageProperties(company.logo)
+          const ratio=props.width/props.height
+          let logoW=44,logoH=logoW/ratio
+          if(logoH>22){logoH=22;logoW=logoH*ratio}
+          pdf.addImage(company.logo,props.fileType||'PNG',margin,y,logoW,logoH)
+          logoBottom=y+logoH+3
+        }catch(e){}
+      }
+      const companyY=Math.max(y,logoBottom)
+      pdf.setFont('helvetica','bold');pdf.setFontSize(14);pdf.setTextColor(dark)
+      pdf.text(company?.name||'',margin,companyY)
+      pdf.setFont('helvetica','normal');pdf.setFontSize(8);pdf.setTextColor(muted)
+      const companyDetails=[company?.trading_as?`t/a ${company.trading_as}`:'',company?.address,company?.phone,company?.email,company?.reg?`Reg: ${company.reg}`:'',vatReg&&company?.vat?`VAT Reg: ${company.vat}`:''].filter(Boolean).join('\n')
+      pdf.text(pdf.splitTextToSize(companyDetails,88),margin,companyY+5)
+
+      pdf.setFont('helvetica','bold');pdf.setFontSize(21);pdf.setTextColor(accent)
+      pdf.text(dt.label.toUpperCase(),pageW-margin,16,{align:'right'})
+      pdf.setFontSize(12);pdf.setTextColor(dark);pdf.text(doc.number||'',pageW-margin,23,{align:'right'})
+      pdf.setFont('helvetica','normal');pdf.setFontSize(8);pdf.setTextColor(muted)
+      const meta=[`Date: ${fmtDate(doc.date)}`,doc.due?`${doc.type==='quote'?'Valid until':'Due'}: ${fmtDate(doc.due)}`:'',doc.po_number?`PO #: ${doc.po_number}`:'',doc.ref?`Ref: ${doc.ref}`:''].filter(Boolean)
+      pdf.text(meta,pageW-margin,29,{align:'right',lineHeightFactor:1.45})
+
+      y=Math.max(companyY+Math.max(15,companyDetails.split('\n').length*4),29+meta.length*4)+4
+      pdf.setDrawColor(accent);pdf.setLineWidth(0.8);pdf.line(margin,y,pageW-margin,y);y+=7
+
+      const clientDetails=[doc.client_name,doc.client_address,vatReg&&doc.client_vat?`VAT: ${doc.client_vat}`:''].filter(Boolean).join('\n')
+      const clientLines=pdf.splitTextToSize(clientDetails,85)
+      const clientH=Math.max(18,clientLines.length*4+9)
+      pdf.setFillColor(light);pdf.roundedRect(margin,y,92,clientH,2,2,'F')
+      pdf.setFont('helvetica','bold');pdf.setFontSize(7);pdf.setTextColor(muted);pdf.text(doc.type==='delivery'?'DELIVER TO':'BILL TO',margin+4,y+5)
+      pdf.setFontSize(9);pdf.setTextColor(dark);pdf.text(clientLines,margin+4,y+11)
+      y+=clientH+7
+
+      const headers=['#','Description']
+      if(hasUnit)headers.push('Unit')
+      headers.push('Qty','Price')
+      if(hasDisc)headers.push('Disc')
+      if(vatReg)headers.push('VAT%')
+      headers.push('Amount')
+      const body=rows.map((it,i)=>{
+        const row=[String(i+1),it.desc||'']
+        if(hasUnit)row.push(it.unit||'')
+        row.push(String(it.qty??''),fmtMoney(it.rate,sym))
+        if(hasDisc)row.push(it.discount>0?`${it.discount}%`:'—')
+        if(vatReg)row.push(`${it.vatRate||0}%`)
+        row.push(fmtMoney(it.net,sym))
+        return row
+      })
+      autoTable(pdf,{
+        startY:y,head:[headers],body,theme:'grid',showHead:'everyPage',
+        margin:{left:margin,right:margin,bottom:20},
+        styles:{font:'helvetica',fontSize:7.8,cellPadding:2.3,textColor:'#1E293B',lineColor:'#E2E8F0',lineWidth:.2,overflow:'linebreak',valign:'middle'},
+        headStyles:{fillColor:accent,textColor:'#FFFFFF',fontStyle:'bold',fontSize:7.4},
+        alternateRowStyles:{fillColor:'#F8FAFC'},
+        columnStyles:{0:{cellWidth:9,halign:'center'},1:{cellWidth:'auto'},[headers.length-1]:{cellWidth:28,halign:'right'}},
+      })
+      y=(pdf.lastAutoTable?.finalY||y)+7
+
+      const totalsH=vatReg?25:14
+      ensureSpace(totalsH)
+      const totalsX=pageW-margin-72
+      if(vatReg){
+        pdf.setFont('helvetica','normal');pdf.setFontSize(8);pdf.setTextColor(muted)
+        pdf.text('Subtotal (excl. VAT)',totalsX,y);pdf.text(fmtMoney(tot.subtotal,sym),pageW-margin,y,{align:'right'});y+=5
+        pdf.text('VAT',totalsX,y);pdf.text(fmtMoney(tot.vat,sym),pageW-margin,y,{align:'right'});y+=6
+      }
+      pdf.setFillColor(accent);pdf.roundedRect(totalsX-2,y-4,74,11,1.5,1.5,'F')
+      pdf.setFont('helvetica','bold');pdf.setFontSize(8.5);pdf.setTextColor('#FFFFFF')
+      pdf.text(doc.type==='receipt'?'AMOUNT RECEIVED':'TOTAL DUE',totalsX+1,y+2)
+      pdf.text(fmtMoney(tot.total,sym),pageW-margin-2,y+2,{align:'right'});y+=13
+
+      if(doc.type!=='delivery'&&banking.length){
+        const bankText=banking.map((b,i)=>[
+          banking.length>1?`ACCOUNT ${i+1}`:'',b.bank&&`Bank: ${b.bank}`,b.accountName&&`Account name: ${b.accountName}`,b.accountNo&&`Account no: ${b.accountNo}`,b.accountType&&`Type: ${b.accountType}`,b.branchCode&&`Branch code: ${b.branchCode}`,b.swift&&`SWIFT: ${b.swift}`,b.reference&&`Reference: ${b.reference}`
+        ].filter(Boolean).join(' · ')).join('\n')
+        const bankLines=pdf.splitTextToSize(bankText,contentW-8)
+        const bankH=bankLines.length*4+12
+        ensureSpace(bankH)
+        pdf.setFillColor('#E8F1FB');pdf.roundedRect(margin,y,contentW,bankH,2,2,'F')
+        pdf.setFont('helvetica','bold');pdf.setFontSize(7);pdf.setTextColor('#1E6FD9');pdf.text('BANKING DETAILS',margin+4,y+5)
+        pdf.setFont('helvetica','normal');pdf.setFontSize(8);pdf.setTextColor(dark);pdf.text(bankLines,margin+4,y+11)
+        y+=bankH+6
+      }
+
+      const addTextBlock=(label,text)=>{
+        if(!text)return
+        pdf.setFont('helvetica','normal');pdf.setFontSize(8)
+        const lines=pdf.splitTextToSize(String(text),contentW)
+        ensureSpace(14)
+        pdf.setFont('helvetica','bold');pdf.setFontSize(7);pdf.setTextColor(muted);pdf.text(label.toUpperCase(),margin,y);y+=5
+        pdf.setFont('helvetica','normal');pdf.setFontSize(8);pdf.setTextColor(muted)
+        for(const line of lines){ensureSpace(5);pdf.text(line,margin,y);y+=4.2}
+        y+=5
+      }
+      addTextBlock('Notes',doc.notes)
+      addTextBlock('Terms & Conditions',doc.terms)
+
+      const pageCount=pdf.getNumberOfPages()
+      for(let p=1;p<=pageCount;p++){
+        pdf.setPage(p)
+        if(doc.status==='Draft'){
+          pdf.setFont('helvetica','bold');pdf.setFontSize(52);pdf.setTextColor('#E2E8F0')
+          pdf.text('DRAFT',105,150,{align:'center',angle:45})
+        }
+        pdf.setDrawColor('#E2E8F0');pdf.setLineWidth(.2);pdf.line(margin,pageH-13,pageW-margin,pageH-13)
+        pdf.setFont('helvetica','normal');pdf.setFontSize(7);pdf.setTextColor(muted)
+        pdf.text(`${company?.name||''}${company?.reg?` · Reg: ${company.reg}`:''}${vatReg&&company?.vat?` · VAT: ${company.vat}`:''}`,margin,pageH-8)
+        pdf.text(`Page ${p} of ${pageCount}`,pageW-margin,pageH-8,{align:'right'})
       }
       const safeNumber=(doc.number||'document').replace(/[^a-z0-9-_]/gi,'_')
-      pdf.save(`${dt.label.replace(/\s+/g,'-')}-${safeNumber}.pdf`)
-    }catch(e){
-      alert('Could not generate PDF: '+e.message)
-    }finally{
-      setGenerating(false)
+      const filename=`${dt.label.replace(/\s+/g,'-')}-${safeNumber}.pdf`
+      return new File([pdf.output('blob')],filename,{type:'application/pdf'})
+  }
+
+  useEffect(()=>{
+    let cancelled=false
+    setPreparedPdf(null);setPdfError('');setShareNotice('');setGenerating(true)
+    buildPdf().then(file=>{if(!cancelled)setPreparedPdf(file)})
+      .catch(error=>{if(!cancelled)setPdfError('Could not prepare PDF: '+error.message)})
+      .finally(()=>{if(!cancelled)setGenerating(false)})
+    return()=>{cancelled=true}
+  },[doc,company])
+
+  const downloadPdf=()=>{
+    if(!preparedPdf)return
+    const url=URL.createObjectURL(preparedPdf)
+    const link=document.createElement('a')
+    link.href=url;link.download=preparedPdf.name;document.body.appendChild(link);link.click();link.remove()
+    setTimeout(()=>URL.revokeObjectURL(url),60000)
+  }
+  const share=async()=>{
+    if(!preparedPdf)return
+    setShareNotice('')
+    // The file is prepared before this tap to retain iOS user activation.
+    // Send the file alone: some share targets otherwise prefer the text.
+    if(navigator.share&&navigator.canShare?.({files:[preparedPdf]})){
+      try{await navigator.share({files:[preparedPdf]})}
+      catch(error){
+        if(error.name==='AbortError')return
+        setShareNotice('Sharing could not open. Tap Download PDF, then attach the saved file in WhatsApp or email.')
+      }
+    }else{
+      downloadPdf()
+      setShareNotice('PDF downloaded. This browser cannot share files directly. Open WhatsApp or email and attach the PDF from Downloads or Files.')
     }
   }
 
   return <div>
     <div className="no-print" style={{marginBottom:18}}>
-      <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center',marginBottom:10}}>
+      <div className="doc-preview-actions">
         <Btn v="p" onClick={()=>window.print()}>🖨 Print</Btn>
-        <Btn v="ok" onClick={downloadPdf} disabled={generating}>{generating?'Generating…':'⬇ Download PDF'}</Btn>
-        {isMobileDevice()
-          ? <Btn v="tl" onClick={share}>📤 Share Invoice</Btn>
-          : <>
-              <Btn v="ok" onClick={email}>✉️ Email</Btn>
-              <Btn v="tl" onClick={whatsapp}>💬 WhatsApp</Btn>
-            </>
-        }
+        <Btn v="ok" onClick={downloadPdf} disabled={!preparedPdf}>{generating?'Preparing PDF…':'⬇ Download PDF'}</Btn>
+        <Btn v="tl" onClick={share} disabled={!preparedPdf}>📤 Share PDF</Btn>
         <Btn v="s" onClick={onBack}>← Back</Btn>
       </div>
       <div style={{background:'#FEF3C7',border:'1px solid #FDE68A',borderRadius:8,padding:'10px 14px',fontSize:12,color:'#92400E',lineHeight:1.6}}>
-        📎 <strong>To send with the invoice attached:</strong> First tap <strong>Download PDF</strong> above, then open your WhatsApp or email app and attach the downloaded file.
+        📎 Tap <strong>Share PDF</strong>, choose WhatsApp or your email app, then choose the recipient. The PDF document will be attached.
       </div>
+      {(pdfError||shareNotice)&&<p role="status" style={{marginTop:10,fontSize:13,color:pdfError?T.red:T.grey600}}>{pdfError||shareNotice}</p>}
     </div>
     <div className="print-doc" ref={printRef}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:26,paddingBottom:18,borderBottom:`3px solid ${dt.color}`}}>
-        <div style={{maxWidth:300}}>
+      {doc.status==='Draft'&&<div className="draft-watermark">DRAFT</div>}
+      <div className="invoice-header" style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:26,paddingBottom:18,borderBottom:`3px solid ${dt.color}`}}>
+        <div className="invoice-company" style={{maxWidth:300}}>
           {company?.logo&&<img src={company.logo} alt="" style={{maxHeight:200,maxWidth:300,objectFit:'contain',objectPosition:'left',marginBottom:14,display:'block'}}/>}
           <div style={{fontWeight:800,fontSize:17,color:T.navy}}>{company?.name}</div>
           {company?.trading_as&&<div style={{fontSize:12,color:T.grey600}}>t/a {company.trading_as}</div>}
@@ -552,11 +722,11 @@ function DocPrint({doc,company,onBack}){
             {vatReg&&company?.vat&&<div style={{fontWeight:700,color:T.navy}}>VAT Reg: {company.vat}</div>}
           </div>
         </div>
-        <div style={{textAlign:'right'}}>
+        <div className="invoice-meta" style={{textAlign:'right'}}>
           <div style={{fontSize:26,fontWeight:900,color:dt.color,textTransform:'uppercase',letterSpacing:'-.5px'}}>{dt.label}</div>
           <div style={{fontSize:16,fontWeight:800,color:T.navy,marginTop:3,display:'flex',alignItems:'center',justifyContent:'flex-end',gap:8}}>
             <span>{doc.number}</span>
-            {doc.type==='receipt'&&<span style={{display:'inline-flex',alignItems:'center',gap:4,border:`1.5px solid ${T.green}`,borderRadius:20,padding:'2px 10px',fontSize:11,fontWeight:800,color:T.green,textTransform:'uppercase',letterSpacing:'.4px',whiteSpace:'nowrap'}}>✓ Paid in Full</span>}
+            {doc.type==='receipt'&&<span style={{display:'inline-flex',alignItems:'center',gap:4,border:`1.5px solid ${T.green}`,borderRadius:20,padding:'2px 10px',fontSize:11,fontWeight:800,color:T.green,textTransform:'uppercase',letterSpacing:'.4px',whiteSpace:'nowrap'}}>✓ Payment Received</span>}
           </div>
           <div style={{fontSize:12,color:'#374151',marginTop:10,lineHeight:1.8}}>
             <div><span style={{color:'#374151'}}>Date: </span><strong>{fmtDate(doc.date)}</strong></div>
@@ -572,7 +742,7 @@ function DocPrint({doc,company,onBack}){
         {doc.client_address&&<div style={{fontSize:12,color:T.grey600,marginTop:3,whiteSpace:'pre-line'}}>{doc.client_address}</div>}
         {vatReg&&doc.client_vat&&<div style={{fontSize:11,color:T.grey400,marginTop:3}}>VAT: {doc.client_vat}</div>}
       </div>
-      <table style={{width:'100%',borderCollapse:'collapse',marginBottom:16}}>
+      <table className="desktop-invoice-table" style={{width:'100%',borderCollapse:'collapse',marginBottom:16}}>
         <thead><tr style={{background:dt.color}}>
           <th style={{padding:'8px 8px',width:30,textAlign:'center',fontSize:11,fontWeight:700,color:'#fff',textTransform:'uppercase'}}>#</th>
           <th style={{padding:'8px 10px',textAlign:'left',fontSize:11,fontWeight:700,color:'#fff',textTransform:'uppercase'}}>Description</th>
@@ -598,14 +768,24 @@ function DocPrint({doc,company,onBack}){
           ))}
         </tbody>
       </table>
+      <div className="mobile-invoice-items">
+        {rows.map((it,i)=><div className="mobile-invoice-item" key={it.id}>
+          <div style={{fontSize:12,fontWeight:800,color:T.navy,lineHeight:1.45,whiteSpace:'pre-line'}}>{it.desc||`Item ${i+1}`}</div>
+          <div style={{display:'flex',justifyContent:'space-between',gap:10,marginTop:7,fontSize:11,color:T.grey600}}>
+            <span>{it.qty} × {fmtMoney(it.rate,sym)}{it.unit?` / ${it.unit}`:''}</span>
+            <strong style={{fontSize:12,color:T.navy,whiteSpace:'nowrap'}}>{fmtMoney(it.net,sym)}</strong>
+          </div>
+          {(it.discount>0||vatReg)&&<div style={{fontSize:10,color:T.grey400,marginTop:4}}>{it.discount>0?`Discount ${it.discount}%`:''}{it.discount>0&&vatReg?' · ':''}{vatReg?`VAT ${it.vatRate||0}%`:''}</div>}
+        </div>)}
+      </div>
       <div style={{display:'flex',justifyContent:'flex-end',marginBottom:20}}>
-        <div style={{width:250}}>
+        <div className="invoice-totals" style={{width:250}}>
           {vatReg&&<>
             <div style={{display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:`1px solid ${T.grey100}`,fontSize:12}}><span style={{color:T.grey600}}>Subtotal (excl. VAT)</span><span>{fmtMoney(tot.subtotal,sym)}</span></div>
             <div style={{display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:`1px solid ${T.grey100}`,fontSize:12}}><span style={{color:T.grey600}}>VAT (15%)</span><span>{fmtMoney(tot.vat,sym)}</span></div>
           </>}
           <div style={{display:'flex',justifyContent:'space-between',padding:'9px 10px',marginTop:4,background:dt.color,borderRadius:6}}>
-            <span style={{fontSize:13,fontWeight:800,color:'#fff'}}>{doc.type==='receipt'?'AMOUNT PAID':`TOTAL${vatReg?' DUE':' DUE (VAT Incl.)'}`}</span>
+            <span style={{fontSize:13,fontWeight:800,color:'#fff'}}>{doc.type==='receipt'?'AMOUNT RECEIVED':'TOTAL DUE'}</span>
             <span style={{fontSize:13,fontWeight:900,color:'#fff',whiteSpace:'nowrap'}}>{fmtMoney(tot.total,sym)}</span>
           </div>
         </div>
@@ -629,7 +809,7 @@ function DocPrint({doc,company,onBack}){
         </div>
       )}
       {(doc.notes||doc.terms)&&(
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:18,marginBottom:14}}>
+        <div className="invoice-notes" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:18,marginBottom:14}}>
           {doc.notes&&<div><div style={{fontSize:10,fontWeight:800,color:'#374151',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:3}}>Notes</div><div style={{fontSize:11,color:T.grey600,lineHeight:1.6}}>{doc.notes}</div></div>}
           {doc.terms&&<div><div style={{fontSize:10,fontWeight:800,color:'#374151',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:3}}>Terms &amp; Conditions</div><div style={{fontSize:11,color:T.grey600,lineHeight:1.7,whiteSpace:'pre-line'}}>{doc.terms}</div></div>}
         </div>
@@ -667,7 +847,7 @@ function Documents({docs,clients,company,onSave,onDelete,onStatusChange,initDocT
   }).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))
   const handleSave=doc=>{onSave(doc);setNewType(null);setEditing(null)}
   const convertQuote=async(quote)=>{
-    if(!confirm('Convert this quote to a Tax Invoice?'))return
+    if(!confirm(`Convert this quote to ${docLabel('invoice',company)}?`))return
     const nextNo=company?.next_nos?.invoice||1
     onSave({...quote,id:undefined,type:'invoice',number:`INV-${nextNo}`,status:'Draft',date:today(),due:addDays(today(),30),linked_to:quote.id})
     setEditing(null);setNewType(null)
@@ -685,7 +865,7 @@ function Documents({docs,clients,company,onSave,onDelete,onStatusChange,initDocT
   const chipColor=type=>type==='invoice'?ac:DT[type]?.color||T.navy
   return <div>
     {(newType||editing)&&(
-      <Modal title={editing?`Edit ${DT[editing.type]?.label}`:`New ${DT[newType]?.label}`} onClose={()=>{setNewType(null);setEditing(null)}} lg>
+      <Modal title={editing?`Edit ${docLabel(editing.type,company)}`:`New ${docLabel(newType,company)}`} onClose={()=>{setNewType(null);setEditing(null)}} lg>
         <DocForm doc={editing} company={company} clients={clients} docType={editing?editing.type:newType} onSave={handleSave} onClose={()=>{setNewType(null);setEditing(null)}} onConvertQuote={convertQuote}/>
       </Modal>
     )}
@@ -702,8 +882,8 @@ function Documents({docs,clients,company,onSave,onDelete,onStatusChange,initDocT
     )}
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:20,flexWrap:'wrap',gap:10}}>
       <div><h1 style={{fontSize:24,fontWeight:900,color:T.navy}}>Documents</h1><p style={{fontSize:13,color:T.grey600}}>{company?.name}</p></div>
-      <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>
-        {DOC_TYPES.map(t=><Btn key={t.key} v="s" sz="sm" onClick={()=>setNewType(t.key)}>+ {t.label}</Btn>)}
+      <div className="doc-create-actions" style={{display:'flex',gap:7,flexWrap:'wrap'}}>
+        {DOC_TYPES.map(t=><Btn key={t.key} v="s" sz="sm" onClick={()=>setNewType(t.key)}>+ {docLabel(t.key,company)}</Btn>)}
       </div>
     </div>
     <div style={{display:'flex',gap:7,marginBottom:16}}>
@@ -715,14 +895,14 @@ function Documents({docs,clients,company,onSave,onDelete,onStatusChange,initDocT
       <input type="text" placeholder="Search # or client…" value={search} onChange={e=>setSearch(e.target.value)} style={{width:180}}/>
       <select value={typeF} onChange={e=>setTypeF(e.target.value)}>
         <option value="all">All Types</option>
-        {DOC_TYPES.map(t=><option key={t.key} value={t.key}>{t.label}</option>)}
+        {DOC_TYPES.map(t=><option key={t.key} value={t.key}>{docLabel(t.key,company)}</option>)}
       </select>
       <select value={statF} onChange={e=>setStatF(e.target.value)}>
         <option value="all">All Statuses</option>
         {Object.keys(SM).map(s=><option key={s} value={s}>{s}</option>)}
       </select>
     </div>
-    <div className="card0">
+    <div className="card0 desktop-doc-table">
       <div style={{overflowX:'auto'}}>
         <table className="tbl">
           <thead><tr><th>#</th><th>Type</th><th>Client</th><th>Date</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead>
@@ -732,7 +912,7 @@ function Documents({docs,clients,company,onSave,onDelete,onStatusChange,initDocT
               const sc=SM[d.status]||SM.Draft;const cc=chipColor(d.type)
               return <tr key={d.id}>
                 <td style={{fontWeight:800,color:T.navy}}>{d.number}</td>
-                <td><span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:10,background:cc+'18',color:cc}}>{DT[d.type]?.label}</span></td>
+                <td><span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:10,background:cc+'18',color:cc}}>{docLabel(d.type,company)}</span></td>
                 <td>{d.client_name}</td>
                 <td style={{color:T.grey600,whiteSpace:'nowrap'}}>{fmtDate(d.date)}</td>
                 <td style={{fontWeight:700,whiteSpace:'nowrap'}}>{fmtMoney(d.totals?.total,sym)}</td>
@@ -748,6 +928,35 @@ function Documents({docs,clients,company,onSave,onDelete,onStatusChange,initDocT
           </tbody>
         </table>
       </div>
+    </div>
+    <div className="mobile-doc-list">
+      {!filtered.length&&<div className="card" style={{textAlign:'center',color:T.grey400}}>No documents found.</div>}
+      {filtered.map(d=>{
+        const sc=SM[d.status]||SM.Draft
+        const cc=chipColor(d.type)
+        return <article className="mobile-doc-card" key={d.id}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10}}>
+            <div>
+              <div style={{fontSize:15,fontWeight:900,color:T.navy}}>{d.number}</div>
+              <div style={{fontSize:11,fontWeight:700,color:cc,marginTop:3}}>{docLabel(d.type,company)}</div>
+            </div>
+            <select aria-label={`Status for ${d.number}`} value={d.status} onChange={e=>onStatusChange(d.id,e.target.value)} style={{border:'none',background:sc.bg,color:sc.fg,padding:'5px 9px',borderRadius:12,fontWeight:700,fontSize:11}}>
+              {(DST[d.type]||['Draft','Sent']).map(s=><option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div style={{fontSize:13,fontWeight:700,marginTop:12}}>{d.client_name}</div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginTop:8}}>
+            <div style={{fontSize:11,color:T.grey600}}>{fmtDate(d.date)}{d.due?` · Due ${fmtDate(d.due)}`:''}</div>
+            <div style={{fontSize:16,fontWeight:900,color:T.navy}}>{fmtMoney(d.totals?.total,sym)}</div>
+          </div>
+          <div className="mobile-doc-actions">
+            <Btn v="s" sz="sm" onClick={()=>setPreview(d)}>Preview</Btn>
+            <Btn v="s" sz="sm" onClick={()=>setEditing(d)}>Edit</Btn>
+            {d.type==='invoice'&&<Btn v="tl" sz="sm" onClick={()=>setRecurSetup(d)}>Repeat</Btn>}
+            <Btn v="d" sz="sm" onClick={()=>confirm('Delete this document?')&&onDelete(d.id)}>Delete</Btn>
+          </div>
+        </article>
+      })}
     </div>
     </>:
     <div className="card0">
@@ -838,7 +1047,7 @@ function Clients({clients,docs,company,onSave,onDelete}){
 
 // ── Companies ──────────────────────────────────────────────────────────────────
 function Companies({companies,activeCoId,onSave,onDelete,setActiveCoId}){
-  const blank={name:'',trading_as:'',reg:'',vat:'',vat_registered:false,address:'',email:'',phone:'',website:'',logo:null,accent_color:'#0D1F3C',banking:[{id:uid(),bank:'',accountName:'',accountNo:'',accountType:'',branchCode:'',swift:'',reference:''}],currency_symbol:'R',next_nos:{invoice:1001,quote:101,delivery:501,credit:201,receipt:801}}
+  const blank={name:'',trading_as:'',reg:'',vat:'',vat_registered:false,address:'',email:'',phone:'',website:'',logo:null,accent_color:'#0D1F3C',business_pack:'general_services',currency_code:'ZAR',banking:[{id:uid(),bank:'',accountName:'',accountNo:'',accountType:'',branchCode:'',swift:'',reference:''}],currency_symbol:'R',next_nos:{invoice:1001,quote:101,delivery:501,credit:201,receipt:801}}
   const [form,setForm]=useState(null)
   const [banking,setBanking]=useState([])
   const logoRef=useRef()
@@ -880,8 +1089,9 @@ function Companies({companies,activeCoId,onSave,onDelete,setActiveCoId}){
           </div>
           <div className="field"><Lbl text="Company Name" req/><Inp value={form.name} onChange={v=>set('name',v)}/></div>
           <div className="field"><Lbl text="Trading As"/><Inp value={form.trading_as||''} onChange={v=>set('trading_as',v)}/></div>
+          <div className="field s2"><Lbl text="Business Type"/><Sel value={form.business_pack||'general_services'} onChange={v=>set('business_pack',v)} options={[{v:'general_services',l:'General Services'},{v:'property_rental',l:'Property Rental'}]}/><div style={{fontSize:11,color:T.grey600,marginTop:5}}>Sets the terminology and document workflow for this company. Property and lease screens will arrive in the rental module.</div></div>
           <div className="field"><Lbl text="Registration No"/><Inp value={form.reg||''} onChange={v=>set('reg',v)}/></div>
-          <div className="field"><Lbl text="Currency Symbol"/><Inp value={form.currency_symbol||'R'} onChange={v=>set('currency_symbol',v)}/></div>
+          <div className="field"><Lbl text="Currency"/><Inp value="South African Rand (ZAR)" onChange={()=>{}} disabled/></div>
           <div className="vat-row s2">
             <input type="checkbox" id="coVat" checked={!!form.vat_registered} onChange={e=>set('vat_registered',e.target.checked)}/>
             <label htmlFor="coVat">This company is VAT registered</label>
@@ -936,6 +1146,7 @@ function Companies({companies,activeCoId,onSave,onDelete,setActiveCoId}){
           <div style={{fontWeight:800,fontSize:14,color:T.navy}}>{co.name}</div>
           {co.trading_as&&<div style={{fontSize:12,color:T.grey600}}>t/a {co.trading_as}</div>}
           {co.reg&&<div style={{fontSize:11,color:T.grey400,marginTop:3}}>Reg: {co.reg}</div>}
+          <div style={{fontSize:11,color:T.grey600,marginTop:3}}>{co.business_pack==='property_rental'?'Property Rental':'General Services'}</div>
           {co.vat_registered&&co.vat&&<div style={{fontSize:11,color:T.teal,fontWeight:700}}>VAT: {co.vat}</div>}
           {co.banking?.[0]?.bank&&<div style={{fontSize:11,color:T.grey600,marginTop:3}}>🏦 {co.banking[0].bank}</div>}
           <div style={{display:'flex',gap:7,marginTop:12,paddingTop:10,borderTop:`1px solid ${T.grey100}`,flexWrap:'wrap'}}>
@@ -1079,7 +1290,7 @@ export default function Dashboard(){
   const deleteClient=async(id)=>{await supabase.from('clients').delete().eq('id',id);setClients(c=>c.filter(x=>x.id!==id));notify('Client deleted')}
   const saveCompany=async(co)=>{
     const isNew=!co.id
-    const payload={user_id:user.id,name:co.name,trading_as:co.trading_as||'',reg:co.reg||'',vat:co.vat||'',vat_registered:co.vat_registered||false,address:co.address||'',email:co.email||'',phone:co.phone||'',website:co.website||'',logo:co.logo||null,accent_color:co.accent_color||T.navy,currency_symbol:co.currency_symbol||'R',banking:co.banking||[],next_nos:co.next_nos||{invoice:1001,quote:101,delivery:501,credit:201,receipt:801}}
+    const payload={user_id:user.id,name:co.name,trading_as:co.trading_as||'',reg:co.reg||'',vat:co.vat||'',vat_registered:co.vat_registered||false,address:co.address||'',email:co.email||'',phone:co.phone||'',website:co.website||'',logo:co.logo||null,accent_color:co.accent_color||T.navy,business_pack:co.business_pack||'general_services',currency_code:'ZAR',currency_symbol:'R',banking:co.banking||[],next_nos:co.next_nos||{invoice:1001,quote:101,delivery:501,credit:201,receipt:801}}
     if(isNew){const {data}=await supabase.from('companies').insert(payload).select().single();setCompanies(c=>[...c,data]);if(!activeCoId)setActiveCoId(data.id)}
     else{const {data}=await supabase.from('companies').update(payload).eq('id',co.id).select().single();setCompanies(c=>c.map(x=>x.id===co.id?data:x))}
     notify('Company saved')
@@ -1100,7 +1311,7 @@ export default function Dashboard(){
     setRecurring(r=>r.filter(x=>x.id!==id));notify('Recurring schedule deleted')
   }
 
-  if(user===undefined||loading)return <div className="loading"><div className="spinner"/><span style={{color:T.grey400}}>Loading Invoxa…</span></div>
+  if(user===undefined||loading)return <div className="loading"><div className="spinner"/><span style={{color:T.grey400}}>Loading MyInvox…</span></div>
 
   // Subscription access check
   const access=checkAccess(subscription)
@@ -1109,11 +1320,11 @@ export default function Dashboard(){
     return <div className="expired-wall">
       <div style={{fontSize:48,marginBottom:8}}>⏰</div>
       <h1 style={{fontSize:28,fontWeight:900,color:T.navy,letterSpacing:'-1px'}}>Your trial has ended</h1>
-      <p style={{color:T.grey600,fontSize:16,maxWidth:440,lineHeight:1.6}}>Your 14-day free trial of Invoxa has expired. Subscribe to continue accessing your documents and creating new ones.</p>
+      <p style={{color:T.grey600,fontSize:16,maxWidth:440,lineHeight:1.6}}>Your 14-day free trial of MyInvox has expired. Subscribe to continue accessing your documents and creating new ones.</p>
       <div style={{background:T.white,border:`1px solid ${T.grey200}`,borderRadius:12,padding:'24px 32px',textAlign:'center',marginTop:8}}>
         <div style={{fontSize:36,fontWeight:900,color:T.navy}}>R149<span style={{fontSize:16,fontWeight:500,color:T.grey600}}>/month</span></div>
         <p style={{color:T.grey600,fontSize:13,margin:'8px 0 16px'}}>All features · Unlimited documents · Cloud sync</p>
-        <a href={`mailto:ndyoko.lwazi@gmail.com?subject=Invoxa Subscription&body=Hi, I would like to subscribe to Invoxa at R149/month. My account email is: ${user?.email}`}
+        <a href={`mailto:ndyoko.lwazi@gmail.com?subject=MyInvox Subscription&body=Hi, I would like to subscribe to MyInvox at R149/month. My account email is: ${user?.email}`}
           style={{display:'inline-block',background:T.blue,color:'#fff',padding:'12px 28px',borderRadius:9,fontWeight:700,fontSize:14,textDecoration:'none'}}>
           Subscribe via Email →
         </a>
@@ -1125,7 +1336,7 @@ export default function Dashboard(){
   if(!companies.length&&!loading){
     return <div className="expired-wall">
       <div style={{fontSize:40,marginBottom:16}}>🏢</div>
-      <div style={{fontWeight:800,fontSize:20,color:T.navy,marginBottom:8}}>Welcome to Invoxa</div>
+      <div style={{fontWeight:800,fontSize:20,color:T.navy,marginBottom:8}}>Welcome to MyInvox</div>
       <div style={{color:T.grey600,marginBottom:24,textAlign:'center',maxWidth:380}}>Let's set up your first company to get started.</div>
       <Companies companies={[]} activeCoId={null} onSave={saveCompany} onDelete={()=>{}} setActiveCoId={setActiveCoId}/>
     </div>
@@ -1144,7 +1355,7 @@ export default function Dashboard(){
       {access.trial&&access.daysLeft<=5&&(
         <div className="trial-bar no-print">
           ⏳ {access.daysLeft} day{access.daysLeft!==1?'s':''} left in your free trial.
-          <a href={`mailto:ndyoko.lwazi@gmail.com?subject=Invoxa Subscription&body=Hi, I would like to subscribe to Invoxa. My account email is: ${user?.email}`}>Subscribe now for R149/month →</a>
+          <a href={`mailto:ndyoko.lwazi@gmail.com?subject=MyInvox Subscription&body=Hi, I would like to subscribe to MyInvox. My account email is: ${user?.email}`}>Subscribe now for R149/month →</a>
         </div>
       )}
       <div className="topbar no-print">
@@ -1163,6 +1374,7 @@ export default function Dashboard(){
       </div>
       <div className="content">{pages[page]||pages.dashboard}</div>
     </div>
+    <MobileNav page={page} setPage={setPage} onNew={()=>{setNewDocType('invoice');setPage('documents')}}/>
     {toast&&<Toast msg={toast} onDone={()=>setToast(null)}/>}
   </div>
 }

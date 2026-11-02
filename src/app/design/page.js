@@ -108,7 +108,12 @@ export default function DesignPreview(){
   }
   const changeDocumentStatus=(record,status)=>{
     try{const result=transitionDemoDocument(localStorage,record.id,status);setSavedDocs(result.documents);setSelected(result.saved);setSaveMessage(`${record.id} marked ${status.toLowerCase()} on this device.`)}
-    catch(error){setNotice(error.message)}
+    catch(error){
+      if(record.status==='Draft'&&/issue date and due/.test(error.message)){
+        setEditorInitial(record);setEditorClient(record.customer||{name:record.name});setSelected(null);setCreating(true);setNotice('')
+        setSaveMessage('Add or confirm the issue date and due date, then save the draft. You can issue it immediately afterwards.')
+      }else setNotice(error.message)
+    }
   }
   const convertQuote=record=>{
     try{const result=convertDemoQuote(localStorage,record.id);setSavedDocs(result.documents);setSelected(result.saved);setPage('docs');setFilter('all');setSaveMessage(result.alreadyExists?'Opened the invoice already linked to this quotation.':'Invoice draft created from the accepted quotation. Review the issue and due dates before issuing it.')}

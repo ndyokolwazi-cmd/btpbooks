@@ -437,13 +437,14 @@ function IndustrySuggestions({onInsert,clientName}){
 // Deterministic draft assistant: no external AI service or customer data transfer.
 function parseDraftLines(input,vatReg){
   const lines=String(input||'').split(/\n|;/).map(x=>x.trim()).filter(Boolean)
+  if(lines.length>40)return {error:'Use 40 line items or fewer per draft.'}
   const result=[]
   for(const line of lines){
-    // Supported patterns: "2 x Tap replacement @ R280" or "Hosting - R250".
+    // A line must include an explicit price; no amount is ever invented.
     const qtyRate=line.match(/^\s*(\d+(?:\.\d+)?)\s*[x×]\s*(.+?)\s*(?:@|at)\s*R?\s*(\d+(?:[.,]\d{1,2})?)\s*$/i)
     const simple=line.match(/^\s*(.+?)\s*(?:-|:|@)\s*R\s*(\d+(?:[.,]\d{1,2})?)\s*$/i)
     const data=qtyRate?{qty:Number(qtyRate[1]),desc:qtyRate[2],rate:Number(qtyRate[3].replace(',','.'))}:simple?{qty:1,desc:simple[1],rate:Number(simple[2].replace(',','.'))}:null
-    if(!data||!Number.isFinite(data.rate)||!Number.isFinite(data.qty)||data.qty<=0||data.rate<0)return {error:'Could not read: '+line+'. Use “Description - R250” or “2 x Description @ R280”.'}
+    if(!data||!data.desc.trim()||!Number.isFinite(data.rate)||!Number.isFinite(data.qty)||data.qty<=0||data.rate<0||data.qty>100000||data.rate>100000000)return {error:'Could not read: '+line+'. Use “Description - R250” or “2 x Description @ R280”.'}
     result.push({id:uid(),desc:data.desc.trim(),qty:data.qty,unit:'',rate:data.rate,vatRate:vatReg?15:0,discount:0})
   }
   if(!result.length)return {error:'Enter at least one priced line item.'}
@@ -477,7 +478,7 @@ function LineItems({items,setItems,vatReg,sym,companyId,clientName}){
   const upd=(id,k,v)=>setItems(items.map(i=>i.id===id?{...i,[k]:['desc','unit'].includes(k)?v:Number(v)}:i))
   const insertSnippet=text=>{
     const target=items.find(i=>!i.desc?.trim())||items[items.length-1]
-    if(!target){add();return}
+    if(!target){setItems(p=>[...p,{id:uid(),desc:text,qty:1,unit:'',rate:0,vatRate:vatReg?15:0,discount:0}]);return}
     setItems(p=>p.map(i=>i.id===target.id?{...i,desc:i.desc?.trim()?i.desc+'\n'+text:text}:i))
   }
   const hasUnit=items.some(i=>i.unit)

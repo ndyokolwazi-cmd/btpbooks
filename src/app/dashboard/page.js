@@ -405,10 +405,17 @@ function LineItems({items,setItems,vatReg,sym,companyId,clientName}){
   const add=()=>setItems([...items,{id:uid(),desc:'',qty:1,unit:'',rate:0,vatRate:vatReg?15:0,discount:0}])
   const rm=id=>setItems(items.filter(i=>i.id!==id))
   const upd=(id,k,v)=>setItems(items.map(i=>i.id===id?{...i,[k]:['desc','unit'].includes(k)?v:Number(v)}:i))
-  const insertSnippet=text=>{\n    const target=items.find(i=>!i.desc?.trim())||items[items.length-1]\n    if(!target){add();return}\n    setItems(p=>p.map(i=>i.id===target.id?{...i,desc:i.desc?.trim()?i.desc+'\\n'+text:text}:i))\n  }\n  const hasUnit=items.some(i=>i.unit)
+  const insertSnippet=text=>{
+    const target=items.find(i=>!i.desc?.trim())||items[items.length-1]
+    if(!target){add();return}
+    setItems(p=>p.map(i=>i.id===target.id?{...i,desc:i.desc?.trim()?i.desc+'\
+'+text:text}:i))
+  }
+  const hasUnit=items.some(i=>i.unit)
   const hasDisc=items.some(i=>i.discount>0)
   const tots=calcTotals(items,vatReg)
   return <div>
+    <SmartText companyId={companyId} clientName={clientName} onInsert={insertSnippet} initialDescription={items.find(i=>i.desc?.trim())?.desc||''}/>
     <div style={{overflowX:'auto',marginBottom:8}}>
       <table className="tbl" style={{minWidth:500}}>
         <thead><tr>

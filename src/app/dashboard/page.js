@@ -403,7 +403,7 @@ function SmartText({companyId,clientName,onInsert,initialDescription}){
       <input className="inp" aria-label="Shortcut name" placeholder="hosting (type /hosting to find it)" value={shortcut} onChange={e=>setShortcut(e.target.value)} style={{marginBottom:8}}/>
       <textarea className="inp" aria-label="Saved phrase" rows={3} value={body} onChange={e=>setBody(e.target.value)} placeholder="Monthly hosting for {month} {year}. Client: {client}"/>
       <div style={{display:'flex',gap:8,marginTop:8}}>
-        <button type="button" className="btn btn-pr btn-sm" disabled={busy} onClick={save}>{busy?'Saving…':editingId?'Update shortcut':'Save shortcut'}</button>
+        <button type="button" className="btn btn-p btn-sm" disabled={busy} onClick={save}>{busy?'Saving…':editingId?'Update shortcut':'Save shortcut'}</button>
         <button type="button" className="btn btn-gh btn-sm" onClick={()=>{setCreating(false);setEditingId(null)}}>Cancel</button>
       </div>
     </div>}
@@ -466,7 +466,7 @@ function DraftAssist({vatReg,sym,onApply}){
         <strong style={{fontSize:12}}>Review before adding</strong>
         {result.items.map(item=><div key={item.id} style={{fontSize:12,padding:'7px 0',borderBottom:'1px solid #E2E8F0'}}>{item.desc} · {item.qty} × {fmtMoney(item.rate,sym)}</div>)}
         <div style={{fontWeight:700,fontSize:12,margin:'8px 0'}}>Total: {fmtMoney(calcTotals(result.items,vatReg).total,sym)} {vatReg?'(including 15% VAT)':''}</div>
-        <button type="button" className="btn btn-pr btn-sm" onClick={()=>{onApply(result.items);setOpen(false);setResult(null);setInput('')}}>Add reviewed items to document</button>
+        <button type="button" className="btn btn-p btn-sm" onClick={()=>{onApply(result.items);setOpen(false);setResult(null);setInput('')}}>Add reviewed items to document</button>
       </div>}
     </div>}
   </div>
@@ -485,7 +485,8 @@ function LineItems({items,setItems,vatReg,sym,companyId,clientName}){
   const hasDisc=items.some(i=>i.discount>0)
   const tots=calcTotals(items,vatReg)
   return <div>
-    <SmartText companyId={companyId} clientName={clientName} onInsert={insertSnippet} initialDescription={items.find(i=>i.desc?.trim())?.desc||''}/>\n    <IndustrySuggestions clientName={clientName} onInsert={insertSnippet}/>
+    <SmartText companyId={companyId} clientName={clientName} onInsert={insertSnippet} initialDescription={items.find(i=>i.desc?.trim())?.desc||''}/>
+    <IndustrySuggestions clientName={clientName} onInsert={insertSnippet}/>
     <DraftAssist vatReg={vatReg} sym={sym} onApply={draft=>setItems(p=>[...p.filter(i=>i.desc?.trim()||Number(i.rate)>0),...draft])}/>
     <div style={{overflowX:'auto',marginBottom:8}}>
       <table className="tbl" style={{minWidth:500}}>
@@ -524,7 +525,7 @@ function LineItems({items,setItems,vatReg,sym,companyId,clientName}){
       </>}
       <div style={{height:1,background:T.grey200,margin:'8px 0'}}/>
       <div style={{display:'flex',justifyContent:'space-between',fontSize:13,fontWeight:800,color:T.navy}}>
-        <span>TOTAL DUE{vatReg?'':' (VAT Incl.)'}</span><span>{fmtMoney(tots.total,sym)}</span>
+        <span>TOTAL DUE{vatReg?'':' (No VAT)'}</span><span>{fmtMoney(tots.total,sym)}</span>
       </div>
     </div>
   </div>

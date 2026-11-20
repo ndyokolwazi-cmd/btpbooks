@@ -334,12 +334,78 @@ function DashboardView({docs,company,setPage,setNewDocType}){
   </div>
 }
 
+// Smart Text snippets are company-scoped and loaded only inside the document editor.
+function expandSmartText(body,clientName){
+  const now=new Date()
+  return String(body||'').replace(/\\{(month|year|client)\\}/gi,(whole,key)=>{
+    const values={month:now.toLocaleString('en-ZA',{month:'long'}),year:String(now.getFullYear()),client:clientName||null}
+    return values[key.toLowerCase()]||whole
+  })
+}
+
+function SmartText({companyId,clientName,onInsert,initialDescription}){
+  const [snippets,setSnippets]=useState([])
+  const [query,setQuery]=useState('')
+  const [open,setOpen]=useState(false)
+  const [creating,setCreating]=useState(false)
+  const [shortcut,setShortcut]=useState('')
+  const [body,setBody]=useState('')
+  const [error,setError]=useState('')
+  const [busy,setBusy]=useState(false)
+  useEffect(()=>{
+    let mounted=true
+    setSnippets([]);setError('')
+    if(!companyId)return
+    supabase.from('text_snippets').select('id,shortcut,title,body').eq('company_id',companyId).order('shortcut')
+      .then(({data,error})=>{if(!mounted)return;if(error)setError('Smart Text setup is not yet available for this business.');else setSnippets(data||[])})
+    return()=>{mounted=false}
+  },[companyId])
+  const save=async()=>{
+    const code=shortcut.trim().toLowerCase().replace(/^\\/+/, '')
+    if(!/^[a-z0-9_-]{2,32}$/.test(code)||!body.trim()){setError('Use a 2–32 character shortcut and a description.');return}
+    setBusy(true);setError('')
+    const {data:{user}}=await supabase.auth.getUser()
+    if(!user){setError('Please sign in again.');setBusy(false);return}
+    const {data,error}=await supabase.from('text_snippets').insert({
+      company_id:companyId,user_id:user.id,shortcut:code,title:code,body:body.trim()
+    }).select('id,shortcut,title,body').single()
+    setBusy(false)
+    if(error){setError(error.code==='23505'?'That shortcut is already saved.':error.message);return}
+    setSnippets(p=>[...p,data].sort((a,b)=>a.shortcut.localeCompare(b.shortcut)))
+    setCreating(false);setShortcut('');setBody('');setOpen(true)
+  }
+  const matches=snippets.filter(x=>(x.shortcut+' '+x.body).toLowerCase().includes(query.toLowerCase()))
+  return <div style={{margin:'8px 0 12px'}}>
+    <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+      <button type="button" className="btn btn-gh btn-sm" onClick={()=>setOpen(!open)}>✦ Smart Text {open?'▴':'▾'}</button>
+      <button type="button" className="btn btn-gh btn-sm" onClick={()=>{setCreating(!creating);setBody(initialDescription||'');setOpen(false)}}>＋ Save phrase</button>
+    </div>
+    {open&&<div style={{padding:12,marginTop:8,border:'1px solid #E2E8F0',borderRadius:9,background:'#F8FAFC'}}>
+      <input className="inp" aria-label="Search saved phrases" value={query} onChange={e=>setQuery(e.target.value.replace(/^\\//,''))} placeholder="Search or type /hosting" style={{marginBottom:8}}/>
+      {!matches.length&&<div style={{fontSize:12,color:'#64748B'}}>No saved phrases yet. Choose Save phrase to add one.</div>}
+      {matches.map(x=><button key={x.id} type="button" onClick={()=>{onInsert(expandSmartText(x.body,clientName));setOpen(false)}} style={{display:'block',width:'100%',textAlign:'left',background:'#fff',border:'1px solid #E2E8F0',borderRadius:7,padding:9,marginBottom:6,cursor:'pointer'}}>
+        <strong>/{x.shortcut}</strong><div style={{fontSize:12,color:'#64748B',whiteSpace:'pre-wrap'}}>{x.body}</div>
+      </button>)}
+    </div>}
+    {creating&&<div style={{padding:12,marginTop:8,border:'1px solid #E2E8F0',borderRadius:9}}>
+      <div style={{fontSize:12,fontWeight:700,marginBottom:8}}>Save a reusable description</div>
+      <input className="inp" aria-label="Shortcut name" placeholder="hosting (type /hosting to find it)" value={shortcut} onChange={e=>setShortcut(e.target.value)} style={{marginBottom:8}}/>
+      <textarea className="inp" aria-label="Saved phrase" rows={3} value={body} onChange={e=>setBody(e.target.value)} placeholder="Monthly hosting for {month} {year}. Client: {client}"/>
+      <div style={{display:'flex',gap:8,marginTop:8}}>
+        <button type="button" className="btn btn-pr btn-sm" disabled={busy} onClick={save}>{busy?'Saving…':'Save shortcut'}</button>
+        <button type="button" className="btn btn-gh btn-sm" onClick={()=>setCreating(false)}>Cancel</button>
+      </div>
+    </div>}
+    {error&&<div role="alert" style={{fontSize:12,color:'#B91C1C',marginTop:6}}>{error}</div>}
+  </div>
+}
+
 // ── Line Items ─────────────────────────────────────────────────────────────────
-function LineItems({items,setItems,vatReg,sym}){
+function LineItems({items,setItems,vatReg,sym,companyId,clientName}){
   const add=()=>setItems([...items,{id:uid(),desc:'',qty:1,unit:'',rate:0,vatRate:vatReg?15:0,discount:0}])
   const rm=id=>setItems(items.filter(i=>i.id!==id))
   const upd=(id,k,v)=>setItems(items.map(i=>i.id===id?{...i,[k]:['desc','unit'].includes(k)?v:Number(v)}:i))
-  const hasUnit=items.some(i=>i.unit)
+  const insertSnippet=text=>{\n    const target=items.find(i=>!i.desc?.trim())||items[items.length-1]\n    if(!target){add();return}\n    setItems(p=>p.map(i=>i.id===target.id?{...i,desc:i.desc?.trim()?i.desc+'\\n'+text:text}:i))\n  }\n  const hasUnit=items.some(i=>i.unit)
   const hasDisc=items.some(i=>i.discount>0)
   const tots=calcTotals(items,vatReg)
   return <div>
@@ -439,7 +505,7 @@ function DocForm({doc,company,clients,docType,onSave,onClose,onConvertQuote}){
     </div>
     <div style={{margin:'16px 0 10px',paddingTop:14,borderTop:`1px solid ${T.grey200}`}}>
       <div style={{fontSize:12,fontWeight:800,color:T.navy,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:10}}>Line Items</div>
-      <LineItems items={items} setItems={setItems} vatReg={vatReg} sym={sym}/>
+      <LineItems items={items} setItems={setItems} vatReg={vatReg} sym={sym} companyId={company?.id} clientName={f.client_name}/>
     </div>
     <div className="g2" style={{paddingTop:12,borderTop:`1px solid ${T.grey200}`,marginBottom:16}}>
       <div className="field"><Lbl text="Notes to Client"/><Inp value={f.notes||''} onChange={v=>set('notes',v)} rows={3} placeholder="Additional notes…"/></div>

@@ -337,7 +337,7 @@ function DashboardView({docs,company,setPage,setNewDocType}){
 // Smart Text snippets are company-scoped and loaded only inside the document editor.
 function expandSmartText(body,clientName){
   const now=new Date()
-  return String(body||'').replace(/\\{(month|year|client)\\}/gi,(whole,key)=>{
+  return String(body||'').replace(/\{(month|year|client)\}/gi,(whole,key)=>{
     const values={month:now.toLocaleString('en-ZA',{month:'long'}),year:String(now.getFullYear()),client:clientName||null}
     return values[key.toLowerCase()]||whole
   })
@@ -352,6 +352,7 @@ function SmartText({companyId,clientName,onInsert,initialDescription}){
   const [body,setBody]=useState('')
   const [error,setError]=useState('')
   const [busy,setBusy]=useState(false)
+  const [editingId,setEditingId]=useState(null)
   useEffect(()=>{
     let mounted=true
     setSnippets([]);setError('')
@@ -361,39 +362,49 @@ function SmartText({companyId,clientName,onInsert,initialDescription}){
     return()=>{mounted=false}
   },[companyId])
   const save=async()=>{
-    const code=shortcut.trim().toLowerCase().replace(/^\\/+/, '')
+    const code=shortcut.trim().toLowerCase().replace(/^[/]+/, '')
     if(!/^[a-z0-9_-]{2,32}$/.test(code)||!body.trim()){setError('Use a 2–32 character shortcut and a description.');return}
     setBusy(true);setError('')
     const {data:{user}}=await supabase.auth.getUser()
     if(!user){setError('Please sign in again.');setBusy(false);return}
-    const {data,error}=await supabase.from('text_snippets').insert({
-      company_id:companyId,user_id:user.id,shortcut:code,title:code,body:body.trim()
-    }).select('id,shortcut,title,body').single()
+    const payload={shortcut:code,title:code,body:body.trim()}
+    const {data,error}=editingId
+      ? await supabase.from('text_snippets').update(payload).eq('id',editingId).eq('company_id',companyId).select('id,shortcut,title,body').single()
+      : await supabase.from('text_snippets').insert({...payload,company_id:companyId,user_id:user.id}).select('id,shortcut,title,body').single()
     setBusy(false)
     if(error){setError(error.code==='23505'?'That shortcut is already saved.':error.message);return}
-    setSnippets(p=>[...p,data].sort((a,b)=>a.shortcut.localeCompare(b.shortcut)))
-    setCreating(false);setShortcut('');setBody('');setOpen(true)
+    setSnippets(p=>[...p.filter(x=>x.id!==data.id),data].sort((a,b)=>a.shortcut.localeCompare(b.shortcut)))
+    setCreating(false);setEditingId(null);setShortcut('');setBody('');setOpen(true)
+  }
+  const editSnippet=x=>{setEditingId(x.id);setShortcut(x.shortcut);setBody(x.body);setCreating(true);setOpen(false);setError('')}
+  const removeSnippet=async x=>{
+    if(!window.confirm('Delete /'+x.shortcut+'? Existing documents will not change.'))return
+    const {error}=await supabase.from('text_snippets').delete().eq('id',x.id).eq('company_id',companyId)
+    if(error){setError(error.message);return}
+    setSnippets(p=>p.filter(item=>item.id!==x.id))
   }
   const matches=snippets.filter(x=>(x.shortcut+' '+x.body).toLowerCase().includes(query.toLowerCase()))
   return <div style={{margin:'8px 0 12px'}}>
     <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
       <button type="button" className="btn btn-gh btn-sm" onClick={()=>setOpen(!open)}>✦ Smart Text {open?'▴':'▾'}</button>
-      <button type="button" className="btn btn-gh btn-sm" onClick={()=>{setCreating(!creating);setBody(initialDescription||'');setOpen(false)}}>＋ Save phrase</button>
+      <button type="button" className="btn btn-gh btn-sm" onClick={()=>{setCreating(!creating);setEditingId(null);setShortcut('');setBody(initialDescription||'');setOpen(false)}}>＋ Save phrase</button>
     </div>
     {open&&<div style={{padding:12,marginTop:8,border:'1px solid #E2E8F0',borderRadius:9,background:'#F8FAFC'}}>
-      <input className="inp" aria-label="Search saved phrases" value={query} onChange={e=>setQuery(e.target.value.replace(/^\\//,''))} placeholder="Search or type /hosting" style={{marginBottom:8}}/>
+      <input className="inp" aria-label="Search saved phrases" value={query} onChange={e=>setQuery(e.target.value.replace(/^[/]/,''))} placeholder="Search or type /hosting" style={{marginBottom:8}}/>
       {!matches.length&&<div style={{fontSize:12,color:'#64748B'}}>No saved phrases yet. Choose Save phrase to add one.</div>}
-      {matches.map(x=><button key={x.id} type="button" onClick={()=>{onInsert(expandSmartText(x.body,clientName));setOpen(false)}} style={{display:'block',width:'100%',textAlign:'left',background:'#fff',border:'1px solid #E2E8F0',borderRadius:7,padding:9,marginBottom:6,cursor:'pointer'}}>
-        <strong>/{x.shortcut}</strong><div style={{fontSize:12,color:'#64748B',whiteSpace:'pre-wrap'}}>{x.body}</div>
-      </button>)}
+      {matches.map(x=><div key={x.id} style={{display:'flex',alignItems:'center',gap:6,background:'#fff',border:'1px solid #E2E8F0',borderRadius:7,padding:7,marginBottom:6}}>
+        <button type="button" onClick={()=>{onInsert(expandSmartText(x.body,clientName));setOpen(false)}} style={{flex:1,minWidth:0,textAlign:'left',background:'none',border:0,cursor:'pointer'}}><strong>/{x.shortcut}</strong><div style={{fontSize:12,color:'#64748B',whiteSpace:'pre-wrap'}}>{x.body}</div></button>
+        <button type="button" aria-label={'Edit '+x.shortcut} className="btn btn-gh btn-sm" onClick={()=>editSnippet(x)}>Edit</button>
+        <button type="button" aria-label={'Delete '+x.shortcut} className="btn btn-gh btn-sm" onClick={()=>removeSnippet(x)}>×</button>
+      </div>)}
     </div>}
     {creating&&<div style={{padding:12,marginTop:8,border:'1px solid #E2E8F0',borderRadius:9}}>
-      <div style={{fontSize:12,fontWeight:700,marginBottom:8}}>Save a reusable description</div>
+      <div style={{fontSize:12,fontWeight:700,marginBottom:8}}>{editingId?'Edit saved description':'Save a reusable description'}</div>
       <input className="inp" aria-label="Shortcut name" placeholder="hosting (type /hosting to find it)" value={shortcut} onChange={e=>setShortcut(e.target.value)} style={{marginBottom:8}}/>
       <textarea className="inp" aria-label="Saved phrase" rows={3} value={body} onChange={e=>setBody(e.target.value)} placeholder="Monthly hosting for {month} {year}. Client: {client}"/>
       <div style={{display:'flex',gap:8,marginTop:8}}>
-        <button type="button" className="btn btn-pr btn-sm" disabled={busy} onClick={save}>{busy?'Saving…':'Save shortcut'}</button>
-        <button type="button" className="btn btn-gh btn-sm" onClick={()=>setCreating(false)}>Cancel</button>
+        <button type="button" className="btn btn-pr btn-sm" disabled={busy} onClick={save}>{busy?'Saving…':editingId?'Update shortcut':'Save shortcut'}</button>
+        <button type="button" className="btn btn-gh btn-sm" onClick={()=>{setCreating(false);setEditingId(null)}}>Cancel</button>
       </div>
     </div>}
     {error&&<div role="alert" style={{fontSize:12,color:'#B91C1C',marginTop:6}}>{error}</div>}

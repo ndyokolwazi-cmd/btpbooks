@@ -408,8 +408,7 @@ function LineItems({items,setItems,vatReg,sym,companyId,clientName}){
   const insertSnippet=text=>{
     const target=items.find(i=>!i.desc?.trim())||items[items.length-1]
     if(!target){add();return}
-    setItems(p=>p.map(i=>i.id===target.id?{...i,desc:i.desc?.trim()?i.desc+'\
-'+text:text}:i))
+    setItems(p=>p.map(i=>i.id===target.id?{...i,desc:i.desc?.trim()?i.desc+'\n'+text:text}:i))
   }
   const hasUnit=items.some(i=>i.unit)
   const hasDisc=items.some(i=>i.discount>0)

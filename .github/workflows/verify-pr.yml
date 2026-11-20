@@ -1,0 +1,47 @@
+name: Verify MyInvox
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [feature/smart-text-industry-assist]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: node scripts/verify-smart-text.mjs
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-for-build-only
+
+  rls-isolation:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test-only
+          POSTGRES_DB: myinvox_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify RLS on isolated PostgreSQL
+        env:
+          PGPASSWORD: test-only
+        run: psql -h localhost -U postgres -d myinvox_test -f scripts/rls-isolation.sql

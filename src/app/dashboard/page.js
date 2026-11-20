@@ -400,6 +400,29 @@ function SmartText({companyId,clientName,onInsert,initialDescription}){
   </div>
 }
 
+const INDUSTRY_PRESETS={
+  general:{label:'General business',items:[]},
+  property:{label:'Property & rentals',items:['Monthly rental for {month} {year} — {property}','Electricity recovery for {month} {year}','Water recovery for {month} {year}']},
+  trades:{label:'Construction & trades',items:['Site inspection and call-out','Labour and installation','Materials supplied']},
+  services:{label:'Professional services & ICT',items:['Monthly website hosting for {month} {year}','Professional consulting services','Monthly support retainer for {month} {year}']},
+  retail:{label:'Retail & wholesale',items:['Goods supplied as per purchase order','Delivery and handling','Bulk order discount']},
+  healthcare:{label:'Healthcare & wellness',items:['Consultation','Assessment','Follow-up appointment']},
+  education:{label:'Education & training',items:['Course registration fee','Training facilitation','Learning materials']}
+}
+function IndustrySuggestions({onInsert,clientName}){
+  const [industry,setIndustry]=useState('general')
+  const preset=INDUSTRY_PRESETS[industry]
+  return <div style={{padding:'10px 12px',border:'1px solid #E2E8F0',borderRadius:9,margin:'8px 0 12px'}}>
+    <div style={{fontSize:12,fontWeight:700,marginBottom:6}}>Industry suggestions <span style={{fontWeight:400,color:'#64748B'}}>(optional)</span></div>
+    <select aria-label="Industry template" className="inp" value={industry} onChange={e=>setIndustry(e.target.value)}>
+      {Object.entries(INDUSTRY_PRESETS).map(([key,v])=><option key={key} value={key}>{v.label}</option>)}
+    </select>
+    {!!preset.items.length&&<div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:8}}>
+      {preset.items.map(item=><button type="button" key={item} className="btn btn-gh btn-sm" onClick={()=>onInsert(expandSmartText(item,clientName))}>{item}</button>)}
+    </div>}
+  </div>
+}
+
 // ── Line Items ─────────────────────────────────────────────────────────────────
 function LineItems({items,setItems,vatReg,sym,companyId,clientName}){
   const add=()=>setItems([...items,{id:uid(),desc:'',qty:1,unit:'',rate:0,vatRate:vatReg?15:0,discount:0}])
@@ -414,7 +437,7 @@ function LineItems({items,setItems,vatReg,sym,companyId,clientName}){
   const hasDisc=items.some(i=>i.discount>0)
   const tots=calcTotals(items,vatReg)
   return <div>
-    <SmartText companyId={companyId} clientName={clientName} onInsert={insertSnippet} initialDescription={items.find(i=>i.desc?.trim())?.desc||''}/>
+    <SmartText companyId={companyId} clientName={clientName} onInsert={insertSnippet} initialDescription={items.find(i=>i.desc?.trim())?.desc||''}/>\n    <IndustrySuggestions clientName={clientName} onInsert={insertSnippet}/>
     <div style={{overflowX:'auto',marginBottom:8}}>
       <table className="tbl" style={{minWidth:500}}>
         <thead><tr>

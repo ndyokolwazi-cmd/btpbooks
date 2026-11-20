@@ -25,3 +25,27 @@ begin
  if exists(select 1 from public.text_snippets where company_id='bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb') then raise exception 'Other company visible'; end if;
 end $$;
 \echo RLS_OWNER_READ_PASS
+
+-- A user must not insert, modify or delete another company's shortcuts.
+do $$
+begin
+ begin
+  insert into public.text_snippets(company_id,user_id,shortcut,body)
+  values ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb','11111111-1111-1111-1111-111111111111','attack','not allowed');
+  raise exception 'Cross-company INSERT unexpectedly succeeded';
+ exception when insufficient_privilege then null;
+ end;
+ if (select count(*) from public.text_snippets where company_id='bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb') <> 0 then
+   raise exception 'Cross-company rows visible';
+ end if;
+end $$;
+update public.text_snippets set body='tampered' where company_id='bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+delete from public.text_snippets where company_id='bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+reset role;
+do $$
+begin
+ if (select body from public.text_snippets where company_id='bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb') <> 'Private business two' then
+  raise exception 'Cross-company update/delete occurred';
+ end if;
+end $$;
+\echo RLS_CROSS_COMPANY_WRITE_PASS

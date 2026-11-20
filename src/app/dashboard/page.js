@@ -434,6 +434,43 @@ function IndustrySuggestions({onInsert,clientName}){
   </div>
 }
 
+// Deterministic draft assistant: no external AI service or customer data transfer.
+function parseDraftLines(input,vatReg){
+  const lines=String(input||'').split(/\\n|;/).map(x=>x.trim()).filter(Boolean)
+  const result=[]
+  const money=/\\b(?:R\\s*)?(\\d+(?:[.,]\\d{1,2})?)\\b/i
+  for(const line of lines){
+    // Supported patterns: "2 x Tap replacement @ R280" or "Hosting - R250".
+    const qtyRate=line.match(/^\\s*(\\d+(?:\\.\\d+)?)\\s*[x×]\\s*(.+?)\\s*(?:@|at)\\s*R?\\s*(\\d+(?:[.,]\\d{1,2})?)\\s*$/i)
+    const simple=line.match(/^\\s*(.+?)\\s*(?:-|:|@)\\s*R\\s*(\\d+(?:[.,]\\d{1,2})?)\\s*$/i)
+    const data=qtyRate?{qty:Number(qtyRate[1]),desc:qtyRate[2],rate:Number(qtyRate[3].replace(',','.'))}:simple?{qty:1,desc:simple[1],rate:Number(simple[2].replace(',','.'))}:null
+    if(!data||!Number.isFinite(data.rate)||!Number.isFinite(data.qty)||data.qty<=0||data.rate<0)return {error:'Could not read: '+line+'. Use “Description - R250” or “2 x Description @ R280”.'}
+    result.push({id:uid(),desc:data.desc.trim(),qty:data.qty,unit:'',rate:data.rate,vatRate:vatReg?15:0,discount:0})
+  }
+  if(!result.length)return {error:'Enter at least one priced line item.'}
+  return {items:result}
+}
+function DraftAssist({vatReg,sym,onApply}){
+  const [open,setOpen]=useState(false)
+  const [input,setInput]=useState('')
+  const [result,setResult]=useState(null)
+  const generate=()=>setResult(parseDraftLines(input,vatReg))
+  return <div style={{margin:'8px 0 12px'}}>
+    <button type="button" className="btn btn-gh btn-sm" onClick={()=>setOpen(!open)}>✦ Draft Assist {open?'▴':'▾'}</button>
+    {open&&<div style={{padding:12,marginTop:8,border:'1px solid #E2E8F0',borderRadius:9,background:'#F8FAFC'}}>
+      <div style={{fontSize:12,color:'#475569',marginBottom:8}}>Describe each item with its price. One per line. This first version uses local rules, not an AI model.</div>
+      <textarea className="inp" aria-label="Draft invoice items" rows={4} value={input} onChange={e=>{setInput(e.target.value);setResult(null)}} placeholder={'Website hosting - R250\\n2 x Email accounts @ R165'}/>
+      <button type="button" className="btn btn-gh btn-sm" onClick={generate} style={{marginTop:8}}>Preview draft</button>
+      {result?.error&&<div role="alert" style={{color:'#B91C1C',fontSize:12,marginTop:8}}>{result.error}</div>}
+      {result?.items&&<div style={{marginTop:10}}>
+        <strong style={{fontSize:12}}>Review before adding</strong>
+        {result.items.map(item=><div key={item.id} style={{fontSize:12,padding:'7px 0',borderBottom:'1px solid #E2E8F0'}}>{item.desc} · {item.qty} × {fmtMoney(item.rate,sym)}</div>)}
+        <div style={{fontWeight:700,fontSize:12,margin:'8px 0'}}>Total: {fmtMoney(calcTotals(result.items,vatReg).total,sym)} {vatReg?'(including 15% VAT)':''}</div>
+        <button type="button" className="btn btn-pr btn-sm" onClick={()=>{onApply(result.items);setOpen(false);setResult(null);setInput('')}}>Add reviewed items to document</button>
+      </div>}
+    </div>}
+  </div>
+}
 // ── Line Items ─────────────────────────────────────────────────────────────────
 function LineItems({items,setItems,vatReg,sym,companyId,clientName}){
   const add=()=>setItems([...items,{id:uid(),desc:'',qty:1,unit:'',rate:0,vatRate:vatReg?15:0,discount:0}])
@@ -449,6 +486,7 @@ function LineItems({items,setItems,vatReg,sym,companyId,clientName}){
   const tots=calcTotals(items,vatReg)
   return <div>
     <SmartText companyId={companyId} clientName={clientName} onInsert={insertSnippet} initialDescription={items.find(i=>i.desc?.trim())?.desc||''}/>\n    <IndustrySuggestions clientName={clientName} onInsert={insertSnippet}/>
+    <DraftAssist vatReg={vatReg} sym={sym} onApply={draft=>setItems(p=>[...p.filter(i=>i.desc?.trim()||Number(i.rate)>0),...draft])}/>
     <div style={{overflowX:'auto',marginBottom:8}}>
       <table className="tbl" style={{minWidth:500}}>
         <thead><tr>

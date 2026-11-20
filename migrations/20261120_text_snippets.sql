@@ -20,3 +20,7 @@ create policy "Owners manage their company snippets" on public.text_snippets
  with check (user_id = (select auth.uid()) and exists (
    select 1 from public.companies c where c.id = company_id and c.user_id = (select auth.uid())
  ));
+
+-- Explicit Data API table privileges; RLS still restricts every row.
+grant select, insert, update, delete on public.text_snippets to authenticated;
+revoke all on public.text_snippets from anon;

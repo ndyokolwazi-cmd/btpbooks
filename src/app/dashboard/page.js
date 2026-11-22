@@ -655,7 +655,17 @@ function DocPrint({doc,company,onBack}){
         heightLeft-=contentH;page++
       }
       const safeNumber=(doc.number||'document').replace(/[^a-z0-9-_]/gi,'_')
-      pdf.save(`${dt.label.replace(/\s+/g,'-')}-${safeNumber}.pdf`)
+      const blob=pdf.output('blob')
+      const filename=`${dt.label.replace(/\s+/g,'-')}-${safeNumber}.pdf`
+      const file=new File([blob],filename,{type:'application/pdf'})
+      if(isMobileDevice()&&navigator.canShare?.({files:[file]})){
+        try{await navigator.share({files:[file],title:filename});return}
+        catch(shareError){if(shareError.name==='AbortError')return}
+      }
+      const url=URL.createObjectURL(blob)
+      const link=document.createElement('a')
+      link.href=url;link.download=filename;document.body.appendChild(link);link.click();link.remove()
+      setTimeout(()=>URL.revokeObjectURL(url),60000)
     }catch(e){
       alert('Could not generate PDF: '+e.message)
     }finally{

@@ -345,18 +345,9 @@ function DashboardView({docs,company,setPage,setNewDocType}){
       </section>
     </div>
     <p style={{fontSize:11,color:T.grey600,marginBottom:20}}>Collected figures currently count invoices marked Paid. Partial payments and payment dates will require a dedicated payment ledger.</p>
-anding Debtors</div>
-          {debtorList.map(d=>(
-            <div key={d.name} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:`1px solid ${T.grey100}`}}>
-              <div>
-                <div style={{fontSize:13,fontWeight:600,color:d.overdue?T.red:T.navy}}>{d.name}</div>
-                {d.overdue&&<div style={{fontSize:10,color:T.red,fontWeight:700}}>OVERDUE</div>}
-              </div>
-              <div style={{fontWeight:700,color:d.overdue?T.red:T.navy}}>{fmtMoney(d.total,sym)}</div>
-            </div>
-          ))}
-        </div>
-      )}
+    <div className="card" style={{marginBottom:20}}>
+      <div style={{fontWeight:800,fontSize:13,color:T.navy,marginBottom:12}}>Quick create</div>
+      <div className="quick-actions">{DOC_TYPES.map(t=><button key={t.key} className="btn btn-s" onClick={()=>{setNewDocType(t.key);setPage('documents')}}>{t.label}</button>)}</div>
     </div>
     <div className="card0">
       <div style={{padding:'14px 18px',borderBottom:`1px solid ${T.grey200}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>

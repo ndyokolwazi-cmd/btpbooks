@@ -86,6 +86,7 @@ input,select,textarea{font-family:inherit;font-size:13px;}
 .nav-btn{display:flex;align-items:center;gap:11px;width:100%;padding:9px 11px;border:none;border-radius:8px;margin-bottom:2px;cursor:pointer;background:transparent;color:rgba(255,255,255,.55);font-weight:500;font-size:13px;text-align:left;}
 .nav-btn.act{background:rgba(255,255,255,.12);color:#fff;font-weight:700;}
 .nav-btn:hover:not(.act){background:rgba(255,255,255,.07);}
+.sb-account-heading{display:none;}
 .sb-foot{padding:14px 16px;border-top:1px solid rgba(255,255,255,.08);font-size:11px;color:rgba(255,255,255,.3);}
 .card{background:#fff;border-radius:12px;border:1px solid #E2E8F0;padding:20px;}
 .card0{background:#fff;border-radius:12px;border:1px solid #E2E8F0;overflow:hidden;}
@@ -141,8 +142,9 @@ input,select,textarea{font-family:inherit;font-size:13px;}
 @media(max-width:768px){
   .sidebar{transform:translateX(-230px);visibility:hidden;}
   .sidebar.open{transform:translateX(0);visibility:visible;}
-  .sidebar .sb-nav{display:none;}
-  .sidebar .sb-foot{margin-top:auto;}
+  .sidebar .sb-nav,.sidebar .sb-sec,.sidebar .sb-company-vat{display:none;}
+  .sidebar .sb-foot{margin-top:0;border-top:0;}
+  .sidebar .sb-account-heading{display:block;}
   .main{margin-left:0;}
   .sb-overlay.show{display:block;}
   .g2{grid-template-columns:1fr;}
@@ -245,8 +247,9 @@ function Sidebar({page,setPage,companies,activeCoId,setActiveCoId,user,onSignOut
         ))}
       </div>
       <div className="sb-foot">
+        <h2 className="sb-lbl sb-account-heading">Account</h2>
         <div style={{marginBottom:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{user?.email}</div>
-        {co?.vat_registered&&co?.vat&&<div>VAT: {co.vat}</div>}
+        {co?.vat_registered&&co?.vat&&<div className="sb-company-vat">VAT: {co.vat}</div>}
           {user?.email==='lwazi@betheproject.co.za'&&<a href="/admin" style={{display:'block',marginTop:8,color:'rgba(255,255,255,.7)',fontSize:11,textDecoration:'none'}}>⚙ Admin Panel</a>}
         <button style={{marginTop:8,background:'rgba(255,255,255,.1)',color:'rgba(255,255,255,.7)',border:'none',padding:'5px 12px',borderRadius:6,fontSize:11,cursor:'pointer'}} onClick={onSignOut}>Sign Out</button>
       </div>

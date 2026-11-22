@@ -67,7 +67,7 @@ input,select,textarea{font-family:inherit;font-size:13px;}
 ::-webkit-scrollbar-thumb{background:#CBD5E1;border-radius:3px;}
 .layout{display:flex;min-height:100vh;}
 .sidebar{width:230px;background:#0D1F3C;display:flex;flex-direction:column;flex-shrink:0;position:fixed;top:0;left:0;bottom:0;z-index:50;overflow-y:auto;transition:transform .2s;}
-.main{flex:1;margin-left:230px;display:flex;flex-direction:column;}
+.main{flex:1;min-width:0;margin-left:230px;display:flex;flex-direction:column;}
 .topbar{background:#fff;border-bottom:1px solid #E2E8F0;padding:11px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:40;flex-wrap:wrap;gap:8px;}
 .content{flex:1;padding:28px;max-width:1160px;width:100%;margin:0 auto;}
 .sb-brand{padding:20px 16px 14px;border-bottom:1px solid rgba(255,255,255,.1);}
@@ -134,16 +134,16 @@ input,select,textarea{font-family:inherit;font-size:13px;}
 .loading{display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:12px;}
 .spinner{width:32px;height:32px;border:3px solid #E2E8F0;border-top-color:#1E6FD9;border-radius:50%;animation:spin .7s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
-.mob-toggle{display:none;background:none;border:none;font-size:22px;color:#0D1F3C;cursor:pointer;}
 .sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:49;}
 .print-doc{background:#fff;max-width:750px;margin:0 auto;padding:36px 44px;border:1px solid #E2E8F0;border-radius:8px;}
 .quick-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;}
 @media print{.no-print{display:none!important;}.sidebar,.modal-bg{display:none!important;}.main{margin-left:0!important;}body{background:#fff;}@page{margin:10mm;size:A4;}html{-webkit-print-color-adjust:exact;print-color-adjust:exact;}.print-doc{padding:0!important;border:none!important;max-width:100%!important;}.print-doc table{page-break-inside:auto;}.print-doc tr{page-break-inside:avoid;}.print-doc thead{display:table-header-group;}}
 @media(max-width:768px){
-  .sidebar{transform:translateX(-230px);}
-  .sidebar.open{transform:translateX(0);}
+  .sidebar{transform:translateX(-230px);visibility:hidden;}
+  .sidebar.open{transform:translateX(0);visibility:visible;}
+  .sidebar .sb-nav{display:none;}
+  .sidebar .sb-foot{margin-top:auto;}
   .main{margin-left:0;}
-  .mob-toggle{display:block;}
   .sb-overlay.show{display:block;}
   .g2{grid-template-columns:1fr;}
   .s2{grid-column:span 1;}
@@ -151,6 +151,16 @@ input,select,textarea{font-family:inherit;font-size:13px;}
   .quick-actions{grid-template-columns:1fr;}
   .stat-grid{grid-template-columns:1fr 1fr;}
   .tbl th,.tbl td{padding:8px 10px;font-size:12px;}
+  .responsive-table,.responsive-table tbody{display:block;}
+  .responsive-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;}
+  .responsive-table tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));padding:8px;}
+  .responsive-table tr+tr{border-top:1px solid #E2E8F0;}
+  .responsive-table td{display:block;min-width:0;border:0;overflow-wrap:anywhere;}
+  .responsive-table td[data-label]::before{content:attr(data-label);display:block;margin-bottom:4px;font-size:10px;font-weight:700;color:#475569;}
+  .responsive-table td[data-label="Actions"],.responsive-table td[colspan]{grid-column:1 / -1;}
+  .responsive-table td[data-label="Actions"]>div{flex-wrap:wrap;}
+  .responsive-table td select,.filter-bar input,.filter-bar select{max-width:100%;}
+  .topbar{overflow-wrap:anywhere;}
   .modal{max-width:100%;margin:0;}
   .modal-bg{padding:8px;align-items:flex-end;overflow-y:hidden;}
   .modal{border-radius:14px 14px 0 0;max-height:90vh;max-height:90dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;}
@@ -206,8 +216,8 @@ const coColor=(co)=>co?.accent_color||T.navy
 const MOBILE_NAV_CSS="\n/* Mobile bottom navigation */\n.mobile-bottom-nav{display:none;}\n@media(max-width:768px){\n  .main{padding-bottom:calc(78px + env(safe-area-inset-bottom));}\n  .mobile-bottom-nav{display:flex;position:fixed;bottom:0;left:0;right:0;z-index:45;background:#fff;border-top:1px solid #E2E8F0;box-shadow:0 -3px 18px rgba(13,31,60,.08);padding:6px 4px calc(6px + env(safe-area-inset-bottom));justify-content:space-around;align-items:center;}\n  .mobile-bottom-nav button{flex:1;min-width:0;background:transparent;border:0;border-radius:9px;padding:6px 1px;color:#64748B;font-size:10px;font-weight:650;display:flex;flex-direction:column;align-items:center;gap:3px;}\n  .mobile-bottom-nav button[aria-current=\"page\"]{background:#E8F1FB;color:#0D1F3C;}\n  .mobile-bottom-nav .bottom-icon{font-size:21px;line-height:24px;}\n}\n@media print{.mobile-bottom-nav{display:none!important;}}\n"
 const NAV=[{id:'dashboard',icon:'⊞',label:'Dashboard'},{id:'documents',icon:'📄',label:'Documents'},{id:'clients',icon:'👥',label:'Clients'},{id:'companies',icon:'🏢',label:'Companies'}]
 
-function Sidebar({page,setPage,companies,activeCoId,setActiveCoId,user,onSignOut,mobile,open,setOpen}){
-  const close=()=>{if(mobile)setOpen(false)}
+function Sidebar({page,setPage,companies,activeCoId,setActiveCoId,user,onSignOut,open,setOpen}){
+  const close=()=>setOpen(false)
   const co=companies.find(c=>c.id===activeCoId)||companies[0]
   return <>
     <div className={`sb-overlay${open?' show':''}`} onClick={()=>setOpen(false)}/>
@@ -355,18 +365,18 @@ function DashboardView({docs,company,setPage,setNewDocType}){
         <button className="btn btn-gh btn-sm" onClick={()=>setPage('documents')}>View all →</button>
       </div>
       <div style={{overflowX:'auto'}}>
-        <table className="tbl">
-          <thead><tr><th>#</th><th>Type</th><th>Client</th><th>Date</th><th>Amount</th><th>Status</th></tr></thead>
-          <tbody>
-            {!recent.length&&<tr><td colSpan={6} style={{textAlign:'center',color:T.grey400,padding:28}}>No documents yet</td></tr>}
+        <table className="tbl responsive-table" role="table">
+          <thead role="rowgroup"><tr role="row"><th role="columnheader" scope="col">#</th><th role="columnheader" scope="col">Type</th><th role="columnheader" scope="col">Client</th><th role="columnheader" scope="col">Date</th><th role="columnheader" scope="col">Amount</th><th role="columnheader" scope="col">Status</th></tr></thead>
+          <tbody role="rowgroup">
+            {!recent.length&&<tr role="row"><td role="cell" colSpan={6} style={{textAlign:'center',color:T.grey400,padding:28}}>No documents yet</td></tr>}
             {recent.map(d=>(
-              <tr key={d.id}>
-                <td style={{fontWeight:700,color:T.navy}}>{d.number}</td>
-                <td><span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:10,background:(d.type==='invoice'?ac:DT[d.type]?.color||T.navy)+'22',color:d.type==='invoice'?ac:DT[d.type]?.color||T.navy}}>{DT[d.type]?.label}</span></td>
-                <td>{d.client_name}</td>
-                <td style={{color:T.grey600,whiteSpace:'nowrap'}}>{fmtDate(d.date)}</td>
-                <td style={{fontWeight:700}}>{fmtMoney(d.totals?.total,sym)}</td>
-                <td><Badge status={d.status}/></td>
+              <tr role="row" key={d.id}>
+                <td role="cell" data-label="Number" style={{fontWeight:700,color:T.navy}}>{d.number}</td>
+                <td role="cell" data-label="Type"><span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:10,background:(d.type==='invoice'?ac:DT[d.type]?.color||T.navy)+'22',color:d.type==='invoice'?ac:DT[d.type]?.color||T.navy}}>{DT[d.type]?.label}</span></td>
+                <td role="cell" data-label="Client">{d.client_name}</td>
+                <td role="cell" data-label="Date" style={{color:T.grey600,whiteSpace:'nowrap'}}>{fmtDate(d.date)}</td>
+                <td role="cell" data-label="Amount" style={{fontWeight:700}}>{fmtMoney(d.totals?.total,sym)}</td>
+                <td role="cell" data-label="Status"><Badge status={d.status}/></td>
               </tr>
             ))}
           </tbody>
@@ -930,20 +940,20 @@ function Documents({docs,clients,company,onSave,onDelete,onStatusChange,initDocT
     </div>
     <div className="card0">
       <div style={{overflowX:'auto'}}>
-        <table className="tbl">
-          <thead><tr><th>#</th><th>Type</th><th>Client</th><th>Date</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead>
-          <tbody>
-            {!filtered.length&&<tr><td colSpan={7} style={{textAlign:'center',color:T.grey400,padding:36}}>No documents found.</td></tr>}
+        <table className="tbl responsive-table" role="table">
+          <thead role="rowgroup"><tr role="row"><th role="columnheader" scope="col">#</th><th role="columnheader" scope="col">Type</th><th role="columnheader" scope="col">Client</th><th role="columnheader" scope="col">Date</th><th role="columnheader" scope="col">Amount</th><th role="columnheader" scope="col">Status</th><th role="columnheader" scope="col">Actions</th></tr></thead>
+          <tbody role="rowgroup">
+            {!filtered.length&&<tr role="row"><td role="cell" colSpan={7} style={{textAlign:'center',color:T.grey400,padding:36}}>No documents found.</td></tr>}
             {filtered.map(d=>{
               const sc=SM[d.status]||SM.Draft;const cc=chipColor(d.type)
-              return <tr key={d.id}>
-                <td style={{fontWeight:800,color:T.navy}}>{d.number}</td>
-                <td><span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:10,background:cc+'18',color:cc}}>{DT[d.type]?.label}</span></td>
-                <td>{d.client_name}</td>
-                <td style={{color:T.grey600,whiteSpace:'nowrap'}}>{fmtDate(d.date)}</td>
-                <td style={{fontWeight:700,whiteSpace:'nowrap'}}>{fmtMoney(d.totals?.total,sym)}</td>
-                <td><select value={d.status} onChange={e=>onStatusChange(d.id,e.target.value)} style={{border:'none',background:sc.bg,color:sc.fg,padding:'3px 8px',borderRadius:12,fontWeight:700,fontSize:11,cursor:'pointer'}}>{(DST[d.type]||['Draft','Sent']).map(s=><option key={s} value={s}>{s}</option>)}</select></td>
-                <td><div style={{display:'flex',gap:5}}>
+              return <tr role="row" key={d.id}>
+                <td role="cell" data-label="Number" style={{fontWeight:800,color:T.navy}}>{d.number}</td>
+                <td role="cell" data-label="Type"><span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:10,background:cc+'18',color:cc}}>{DT[d.type]?.label}</span></td>
+                <td role="cell" data-label="Client">{d.client_name}</td>
+                <td role="cell" data-label="Date" style={{color:T.grey600,whiteSpace:'nowrap'}}>{fmtDate(d.date)}</td>
+                <td role="cell" data-label="Amount" style={{fontWeight:700,whiteSpace:'nowrap'}}>{fmtMoney(d.totals?.total,sym)}</td>
+                <td role="cell" data-label="Status"><select value={d.status} onChange={e=>onStatusChange(d.id,e.target.value)} style={{border:'none',background:sc.bg,color:sc.fg,padding:'3px 8px',borderRadius:12,fontWeight:700,fontSize:11,cursor:'pointer'}}>{(DST[d.type]||['Draft','Sent']).map(s=><option key={s} value={s}>{s}</option>)}</select></td>
+                <td role="cell" data-label="Actions"><div style={{display:'flex',gap:5}}>
                   <Btn v="gh" sz="sm" onClick={()=>setPreview(d)}>👁</Btn>
                   <Btn v="s" sz="sm" onClick={()=>setEditing(d)}>Edit</Btn>
                   {d.type==='invoice'&&<Btn v="tl" sz="sm" onClick={()=>setRecurSetup(d)}>🔁</Btn>}
@@ -958,17 +968,17 @@ function Documents({docs,clients,company,onSave,onDelete,onStatusChange,initDocT
     </>:
     <div className="card0">
       <div style={{overflowX:'auto'}}>
-        <table className="tbl">
-          <thead><tr><th>Client</th><th>Frequency</th><th>Next Invoice</th><th>Status</th><th>Actions</th></tr></thead>
-          <tbody>
-            {!myRecurring.length&&<tr><td colSpan={5} style={{textAlign:'center',color:T.grey400,padding:36}}>No recurring invoices yet. Use the 🔁 button on an invoice to schedule one.</td></tr>}
+        <table className="tbl responsive-table" role="table">
+          <thead role="rowgroup"><tr role="row"><th role="columnheader" scope="col">Client</th><th role="columnheader" scope="col">Frequency</th><th role="columnheader" scope="col">Next Invoice</th><th role="columnheader" scope="col">Status</th><th role="columnheader" scope="col">Actions</th></tr></thead>
+          <tbody role="rowgroup">
+            {!myRecurring.length&&<tr role="row"><td role="cell" colSpan={5} style={{textAlign:'center',color:T.grey400,padding:36}}>No recurring invoices yet. Use the 🔁 button on an invoice to schedule one.</td></tr>}
             {myRecurring.map(r=>(
-              <tr key={r.id}>
-                <td style={{fontWeight:700,color:T.navy}}>{r.template?.client_name}</td>
-                <td>{FREQUENCIES.find(f=>f.v===r.frequency)?.l||r.frequency}</td>
-                <td style={{color:T.grey600,whiteSpace:'nowrap'}}>{fmtDate(r.next_run)}</td>
-                <td><span className="badge" style={r.active?{background:SM.Sent.bg,color:SM.Sent.fg}:{background:T.grey100,color:T.grey600}}>{r.active?'Active':'Paused'}</span></td>
-                <td><div style={{display:'flex',gap:5}}>
+              <tr role="row" key={r.id}>
+                <td role="cell" data-label="Client" style={{fontWeight:700,color:T.navy}}>{r.template?.client_name}</td>
+                <td role="cell" data-label="Frequency">{FREQUENCIES.find(f=>f.v===r.frequency)?.l||r.frequency}</td>
+                <td role="cell" data-label="Next Invoice" style={{color:T.grey600,whiteSpace:'nowrap'}}>{fmtDate(r.next_run)}</td>
+                <td role="cell" data-label="Status"><span className="badge" style={r.active?{background:SM.Sent.bg,color:SM.Sent.fg}:{background:T.grey100,color:T.grey600}}>{r.active?'Active':'Paused'}</span></td>
+                <td role="cell" data-label="Actions"><div style={{display:'flex',gap:5}}>
                   <Btn v="s" sz="sm" onClick={()=>onToggleRecurring(r.id,!r.active)}>{r.active?'Pause':'Resume'}</Btn>
                   <Btn v="d" sz="sm" onClick={()=>confirm('Delete this recurring schedule?')&&onDeleteRecurring(r.id)}>✕</Btn>
                 </div></td>
@@ -1190,13 +1200,11 @@ export default function Dashboard(){
   const [toast,setToast]=useState(null)
   const [loading,setLoading]=useState(true)
   const [sidebarOpen,setSidebarOpen]=useState(false)
-  const [isMobile,setIsMobile]=useState(false)
   const [newDocType,setNewDocType]=useState(null)
   const [subscription,setSubscription]=useState(null)
 
   useEffect(()=>{
     const style=document.createElement('style');style.textContent=CSS+MOBILE_NAV_CSS;document.head.appendChild(style)
-    const mq=window.matchMedia('(max-width:768px)');setIsMobile(mq.matches);mq.addEventListener('change',e=>setIsMobile(e.matches))
     return()=>document.head.removeChild(style)
   },[])
 
@@ -1345,7 +1353,7 @@ export default function Dashboard(){
   }
 
   return <div className="layout">
-    <Sidebar page={page} setPage={setPage} companies={companies} activeCoId={activeCoId} setActiveCoId={setActiveCoId} user={user} onSignOut={signOut} mobile={isMobile} open={sidebarOpen} setOpen={setSidebarOpen}/>
+    <Sidebar page={page} setPage={setPage} companies={companies} activeCoId={activeCoId} setActiveCoId={setActiveCoId} user={user} onSignOut={signOut} open={sidebarOpen} setOpen={setSidebarOpen}/>
     <div className="main">
       {access.trial&&access.daysLeft<=5&&(
         <div className="trial-bar no-print">
@@ -1355,7 +1363,6 @@ export default function Dashboard(){
       )}
       <div className="topbar no-print">
         <div style={{display:'flex',alignItems:'center',gap:10}}>
-          {isMobile&&<button className="mob-toggle" onClick={()=>setSidebarOpen(true)}>☰</button>}
           <div>
             <span style={{fontWeight:700,fontSize:13,color:T.navy}}>{company?.name}</span>
             {company?.vat_registered&&<span style={{fontSize:10,color:T.teal,marginLeft:7,fontWeight:700}}>VAT Registered</span>}
@@ -1369,14 +1376,14 @@ export default function Dashboard(){
       </div>
       <div className="content">{pages[page]||pages.dashboard}</div>
     </div>
-    {isMobile&&<nav className="mobile-bottom-nav no-print" aria-label="Main navigation">
+    <nav className="mobile-bottom-nav no-print" aria-label="Main navigation">
       {NAV.map(n=><button key={n.id} type="button" aria-current={page===n.id?'page':undefined} onClick={()=>{setPage(n.id);setSidebarOpen(false);setNewDocType(null)}}>
         <span className="bottom-icon" aria-hidden="true">{n.icon}</span><span>{n.label}</span>
       </button>)}
       <button type="button" aria-label="More settings and account options" onClick={()=>setSidebarOpen(true)}>
         <span className="bottom-icon" aria-hidden="true">☰</span><span>More</span>
       </button>
-    </nav>}
+    </nav>
     {toast&&<Toast msg={toast} onDone={()=>setToast(null)}/>}
   </div>
 }

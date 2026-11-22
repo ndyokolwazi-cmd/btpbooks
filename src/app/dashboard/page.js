@@ -203,6 +203,7 @@ function Toast({msg,onDone}){
 const coColor=(co)=>co?.accent_color||T.navy
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
+const MOBILE_NAV_CSS="\n/* Mobile bottom navigation */\n.mobile-bottom-nav{display:none;}\n@media(max-width:768px){\n  .main{padding-bottom:calc(78px + env(safe-area-inset-bottom));}\n  .mobile-bottom-nav{display:flex;position:fixed;bottom:0;left:0;right:0;z-index:45;background:#fff;border-top:1px solid #E2E8F0;box-shadow:0 -3px 18px rgba(13,31,60,.08);padding:6px 4px calc(6px + env(safe-area-inset-bottom));justify-content:space-around;align-items:center;}\n  .mobile-bottom-nav button{flex:1;min-width:0;background:transparent;border:0;border-radius:9px;padding:6px 1px;color:#64748B;font-size:10px;font-weight:650;display:flex;flex-direction:column;align-items:center;gap:3px;}\n  .mobile-bottom-nav button[aria-current=\"page\"]{background:#E8F1FB;color:#0D1F3C;}\n  .mobile-bottom-nav .bottom-icon{font-size:21px;line-height:24px;}\n}\n@media print{.mobile-bottom-nav{display:none!important;}}\n"
 const NAV=[{id:'dashboard',icon:'⊞',label:'Dashboard'},{id:'documents',icon:'📄',label:'Documents'},{id:'clients',icon:'👥',label:'Clients'},{id:'companies',icon:'🏢',label:'Companies'}]
 
 function Sidebar({page,setPage,companies,activeCoId,setActiveCoId,user,onSignOut,mobile,open,setOpen}){
@@ -1153,7 +1154,7 @@ export default function Dashboard(){
   const [subscription,setSubscription]=useState(null)
 
   useEffect(()=>{
-    const style=document.createElement('style');style.textContent=CSS;document.head.appendChild(style)
+    const style=document.createElement('style');style.textContent=CSS+MOBILE_NAV_CSS;document.head.appendChild(style)
     const mq=window.matchMedia('(max-width:768px)');setIsMobile(mq.matches);mq.addEventListener('change',e=>setIsMobile(e.matches))
     return()=>document.head.removeChild(style)
   },[])
@@ -1327,6 +1328,14 @@ export default function Dashboard(){
       </div>
       <div className="content">{pages[page]||pages.dashboard}</div>
     </div>
+    {isMobile&&<nav className="mobile-bottom-nav no-print" aria-label="Main navigation">
+      {NAV.map(n=><button key={n.id} type="button" aria-current={page===n.id?'page':undefined} onClick={()=>{setPage(n.id);setSidebarOpen(false);setNewDocType(null)}}>
+        <span className="bottom-icon" aria-hidden="true">{n.icon}</span><span>{n.label}</span>
+      </button>)}
+      <button type="button" aria-label="More settings and account options" onClick={()=>setSidebarOpen(true)}>
+        <span className="bottom-icon" aria-hidden="true">☰</span><span>More</span>
+      </button>
+    </nav>}
     {toast&&<Toast msg={toast} onDone={()=>setToast(null)}/>}
   </div>
 }

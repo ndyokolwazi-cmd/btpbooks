@@ -438,17 +438,26 @@ function IndustrySuggestions({onInsert,clientName}){
 function parseDraftLines(input,vatReg){
   const lines=String(input||'').split(/\n|;/).map(x=>x.trim()).filter(Boolean)
   if(lines.length>40)return {error:'Use 40 line items or fewer per draft.'}
-  const result=[]
+  const items=[],unresolved=[]
   for(const line of lines){
-    // A line must include an explicit price; no amount is ever invented.
-    const qtyRate=line.match(/^\s*(\d+(?:\.\d+)?)\s*[x×]\s*(.+?)\s*(?:@|at)\s*R?\s*(\d+(?:[.,]\d{1,2})?)\s*$/i)
-    const simple=line.match(/^\s*(.+?)\s*(?:-|:|@)\s*R\s*(\d+(?:[.,]\d{1,2})?)\s*$/i)
-    const data=qtyRate?{qty:Number(qtyRate[1]),desc:qtyRate[2],rate:Number(qtyRate[3].replace(',','.'))}:simple?{qty:1,desc:simple[1],rate:Number(simple[2].replace(',','.'))}:null
-    if(!data||!data.desc.trim()||!Number.isFinite(data.rate)||!Number.isFinite(data.qty)||data.qty<=0||data.rate<0||data.qty>100000||data.rate>100000000)return {error:'Could not read: '+line+'. Use “Description - R250” or “2 x Description @ R280”.'}
-    result.push({id:uid(),desc:data.desc.trim(),qty:data.qty,unit:'',rate:data.rate,vatRate:vatReg?15:0,discount:0})
+    const amounts=[...line.matchAll(/(?:R|ZAR|rand)\s*([\d ]+(?:[.,]\d{1,2})?)/gi)]
+    if(amounts.length!==1){unresolved.push(line);continue}
+    const m=amounts[0],rate=Number(m[1].replace(/\s/g,'').replace(',','.'))
+    let desc=(line.slice(0,m.index)+' '+line.slice(m.index+m[0].length)).replace(/^[\s:=-]+|[\s:=-]+$/g,'').trim()
+    let qty=1
+    const prefix=desc.match(/^(\d+(?:[.,]\d+)?)\s*(?:x|×|units? of|items? of)\s+/i)
+    const suffix=desc.match(/\s+[x×]\s*(\d+(?:[.,]\d+)?)$/i)
+    const labelled=desc.match(/\b(?:quantity|qty)\s*[:=]?\s*(\d+(?:[.,]\d+)?)/i)
+    if(prefix){qty=Number(prefix[1].replace(',','.'));desc=desc.slice(prefix[0].length)}
+    else if(suffix){qty=Number(suffix[1].replace(',','.'));desc=desc.slice(0,suffix.index)}
+    else if(labelled){qty=Number(labelled[1].replace(',','.'));desc=desc.replace(labelled[0],'').trim()}
+    desc=desc.replace(/^(?:please\s+)?(?:add|invoice|charge|bill|include)\s+(?:me\s+|for\s+|the\s+)?/i,'').replace(/\b(?:at|for|each|per item|costs?)\s*$/i,'').trim()
+    if(!desc||!Number.isFinite(rate)||!Number.isFinite(qty)||qty<=0||rate<0||qty>100000||rate>100000000){unresolved.push(line);continue}
+    items.push({id:uid(),desc,qty,unit:'',rate,vatRate:vatReg?15:0,discount:0})
   }
-  if(!result.length)return {error:'Enter at least one priced line item.'}
-  return {items:result}
+  if(unresolved.length)return {error:'Please clarify these lines (include one price per item): '+unresolved.join(' | ')}
+  if(!items.length)return {error:'Describe the work and include a price, for example “Charge for hosting R250”.'}
+  return {items}
 }
 function DraftAssist({vatReg,sym,onApply}){
   const [open,setOpen]=useState(false)
@@ -458,7 +467,7 @@ function DraftAssist({vatReg,sym,onApply}){
   return <div style={{margin:'8px 0 12px'}}>
     <button type="button" className="btn btn-gh btn-sm" onClick={()=>setOpen(!open)}>✦ Draft Assist {open?'▴':'▾'}</button>
     {open&&<div style={{padding:12,marginTop:8,border:'1px solid #E2E8F0',borderRadius:9,background:'#F8FAFC'}}>
-      <div style={{fontSize:12,color:'#475569',marginBottom:8}}>Describe each item with its price. One per line. This first version uses local rules, not an AI model.</div>
+      <div style={{fontSize:12,color:'#475569',marginBottom:8}}>Write naturally, one item per line. Include one price per item; unclear details will be flagged for review.</div>
       <textarea className="inp" aria-label="Draft invoice items" rows={4} value={input} onChange={e=>{setInput(e.target.value);setResult(null)}} placeholder={'Website hosting - R250\n2 x Email accounts @ R165'}/>
       <button type="button" className="btn btn-gh btn-sm" onClick={generate} style={{marginTop:8}}>Preview draft</button>
       {result?.error&&<div role="alert" style={{color:'#B91C1C',fontSize:12,marginTop:8}}>{result.error}</div>}

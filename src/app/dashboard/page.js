@@ -203,6 +203,7 @@ function Toast({msg,onDone}){
 const coColor=(co)=>co?.accent_color||T.navy
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
+const MOBILE_NAV_CSS="\n/* Mobile bottom navigation */\n.mobile-bottom-nav{display:none;}\n@media(max-width:768px){\n  .main{padding-bottom:calc(78px + env(safe-area-inset-bottom));}\n  .mobile-bottom-nav{display:flex;position:fixed;bottom:0;left:0;right:0;z-index:45;background:#fff;border-top:1px solid #E2E8F0;box-shadow:0 -3px 18px rgba(13,31,60,.08);padding:6px 4px calc(6px + env(safe-area-inset-bottom));justify-content:space-around;align-items:center;}\n  .mobile-bottom-nav button{flex:1;min-width:0;background:transparent;border:0;border-radius:9px;padding:6px 1px;color:#64748B;font-size:10px;font-weight:650;display:flex;flex-direction:column;align-items:center;gap:3px;}\n  .mobile-bottom-nav button[aria-current=\"page\"]{background:#E8F1FB;color:#0D1F3C;}\n  .mobile-bottom-nav .bottom-icon{font-size:21px;line-height:24px;}\n}\n@media print{.mobile-bottom-nav{display:none!important;}}\n"
 const NAV=[{id:'dashboard',icon:'⊞',label:'Dashboard'},{id:'documents',icon:'📄',label:'Documents'},{id:'clients',icon:'👥',label:'Clients'},{id:'companies',icon:'🏢',label:'Companies'}]
 
 function Sidebar({page,setPage,companies,activeCoId,setActiveCoId,user,onSignOut,mobile,open,setOpen}){
@@ -245,6 +246,7 @@ function Sidebar({page,setPage,companies,activeCoId,setActiveCoId,user,onSignOut
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 function DashboardView({docs,company,setPage,setNewDocType}){
+  const [period,setPeriod]=useState('month')
   const my=docs.filter(d=>d.company_id===company?.id)
   const inv=my.filter(d=>d.type==='invoice')
   const sym=company?.currency_symbol||'R'
@@ -262,50 +264,90 @@ function DashboardView({docs,company,setPage,setNewDocType}){
   })
   const debtorList=Object.values(debtors).sort((a,b)=>b.total-a.total)
 
+  const now=new Date()
+  const months=period==='month'?1:period==='quarter'?3:12
+  const from=new Date(now.getFullYear(),now.getMonth()-months+1,1)
+  const dated=inv.filter(d=>{const dt=new Date(d.date||d.created_at);return !Number.isNaN(dt.getTime())&&dt>=from&&dt<=now})
+  const totalPeriod=dated.reduce((n,d)=>n+Number(d.totals?.total||0),0)
+  // Without a payment ledger, only fully paid invoices count as collected.
+  const collectedPeriod=dated.filter(d=>d.status==='Paid').reduce((n,d)=>n+Number(d.totals?.total||0),0)
+  const unpaidPeriod=dated.filter(d=>['Sent','Overdue'].includes(d.status)).reduce((n,d)=>n+Number(d.totals?.total||0),0)
+  const overduePeriod=dated.filter(d=>d.status==='Overdue').reduce((n,d)=>n+Number(d.totals?.total||0),0)
+  const customerMap={}
+  dated.filter(d=>d.status==='Paid').forEach(d=>{const key=d.client_name||'Unassigned';customerMap[key]=(customerMap[key]||0)+Number(d.totals?.total||0)})
+  const customers=Object.entries(customerMap).sort((a,b)=>b[1]-a[1])
+  const palette=['#1E6FD9','#0BA89A','#D97706','#7C3AED','#64748B']
+  const topCustomers=customers.slice(0,4).map(([name,value])=>({name,value}))
+  const other=customers.slice(4).reduce((n,[,v])=>n+v,0)
+  if(other)topCustomers.push({name:'Other customers',value:other})
+  let running=0
+  const pie=topCustomers.length?topCustomers.map((c,i)=>{const from=running;running+=c.value/collectedPeriod*100;return `${palette[i]} ${from}% ${running}%`}).join(','):''
+  const series=Array.from({length:Math.min(months,6)},(_,i)=>{
+    const date=new Date(now.getFullYear(),now.getMonth()-Math.min(months,6)+i+1,1)
+    const items=inv.filter(d=>{const t=new Date(d.date||d.created_at);return t.getFullYear()===date.getFullYear()&&t.getMonth()===date.getMonth()})
+    return {label:date.toLocaleDateString('en-ZA',{month:'short'}),invoiced:items.reduce((n,d)=>n+Number(d.totals?.total||0),0),paid:items.filter(d=>d.status==='Paid').reduce((n,d)=>n+Number(d.totals?.total||0),0)}
+  })
+  const peak=Math.max(1,...series.flatMap(x=>[x.invoiced,x.paid]))
+  const ageing=[{label:'Current',value:0},{label:'1–30 days',value:0},{label:'31–60 days',value:0},{label:'60+ days',value:0}]
+  inv.filter(d=>['Sent','Overdue'].includes(d.status)).forEach(d=>{
+    const due=new Date(d.due_date||d.dueDate||d.date||d.created_at)
+    const age=Number.isNaN(due.getTime())?0:Math.floor((now-due)/86400000)
+    ageing[age<=0?0:age<=30?1:age<=60?2:3].value+=Number(d.totals?.total||0)
+  })
+  const maxAge=Math.max(1,...ageing.map(x=>x.value))
+  const graphCard={background:'#fff',border:'1px solid #E2E8F0',borderRadius:12,padding:18,minWidth:0}
+  const titleStyle={fontWeight:800,color:T.navy,fontSize:14,marginBottom:5}
   return <div>
-    <h1 style={{fontSize:26,fontWeight:900,color:T.navy,marginBottom:4}}>{company?.name||'Dashboard'}</h1>
-    <p style={{fontSize:13,color:T.grey600,marginBottom:24}}>{fmtDate(today())}</p>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:12,marginBottom:18}}>
+      <div><h1 style={{fontSize:26,fontWeight:900,color:T.navy}}>{company?.name||'Dashboard'}</h1><p style={{fontSize:12,color:T.grey600,marginTop:4}}>Financial overview · {fmtDate(today())}</p></div>
+      <div role="group" aria-label="Dashboard period" style={{display:'flex',gap:4,background:'#E8F1FB',borderRadius:10,padding:4}}>
+        {[['month','Month'],['quarter','Quarter'],['year','Year']].map(([id,label])=><button key={id} type="button" aria-pressed={period===id} onClick={()=>setPeriod(id)} style={{border:0,borderRadius:7,padding:'8px 12px',fontSize:12,fontWeight:700,background:period===id?'#fff':'transparent',color:T.navy}}>{label}</button>)}
+      </div>
+    </div>
     <div className="stat-grid">
       {[
-        {l:'Total Invoiced',v:fmtMoney(totalInv,sym),c:ac,i:'📊'},
-        {l:'Collected',v:fmtMoney(paid,sym),c:T.green,i:'✅'},
-        {l:'Outstanding',v:fmtMoney(outstanding,sym),c:T.blue,i:'⏳'},
-        {l:'Overdue',v:`${overdue.length} invoice${overdue.length!==1?'s':''}`,c:T.red,i:'⚠️'},
-      ].map(s=>(
-        <div key={s.l} className="stat-card" style={{borderLeftColor:s.c}}>
-          <div style={{fontSize:20,marginBottom:6}}>{s.i}</div>
-          <div style={{fontSize:11,fontWeight:700,color:T.grey600,textTransform:'uppercase',letterSpacing:'.5px'}}>{s.l}</div>
-          <div style={{fontSize:22,fontWeight:900,color:s.c,marginTop:5}}>{s.v}</div>
-        </div>
-      ))}
+        {l:'Invoiced',v:fmtMoney(totalPeriod,sym),c:ac,i:'📄'},
+        {l:'Collected (paid invoices)',v:fmtMoney(collectedPeriod,sym),c:T.green,i:'✓'},
+        {l:'Outstanding',v:fmtMoney(unpaidPeriod,sym),c:T.blue,i:'⏳'},
+        {l:'Overdue',v:fmtMoney(overduePeriod,sym),c:T.red,i:'⚠'},
+      ].map(x=><div key={x.l} className="stat-card" style={{borderLeftColor:x.c}}><div style={{fontSize:18,marginBottom:5}}>{x.i}</div><div style={{fontSize:11,color:T.grey600,fontWeight:700}}>{x.l}</div><div style={{fontSize:21,fontWeight:900,color:x.c,marginTop:5}}>{x.v}</div></div>)}
     </div>
-    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(260px,1fr))',gap:20,marginBottom:24}}>
-      <div className="card">
-        <div style={{fontWeight:800,fontSize:13,color:T.navy,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:14}}>Quick Create</div>
-        <div className="quick-actions">
-          {DOC_TYPES.map(t=>(
-            <button key={t.key} className="btn btn-s" style={{justifyContent:'flex-start',gap:8,fontSize:12}}
-              onClick={()=>{setNewDocType(t.key);setPage('documents')}}>
-              <span style={{width:8,height:8,borderRadius:'50%',background:t.key==='invoice'?ac:t.color,flexShrink:0,display:'inline-block'}}/>
-              {t.label}
-            </button>
-          ))}
+    <div className="dashboard-chart-grid" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,340px),1fr))',gap:16,marginBottom:20}}>
+      <section style={graphCard}>
+        <div style={titleStyle}>Payments by customer</div>
+        <p style={{fontSize:12,color:T.grey600,marginBottom:15}}>Fully paid invoices in the selected period</p>
+        {topCustomers.length?<div style={{display:'flex',gap:18,alignItems:'center',flexWrap:'wrap'}}>
+          <div role="img" aria-label="Customer payment distribution" style={{width:150,height:150,borderRadius:'50%',background:`conic-gradient(${pie})`,flexShrink:0,margin:'0 auto'}}/>
+          <div style={{flex:'1 1 140px'}}>{topCustomers.map((c,i)=><div key={c.name} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'6px 0',fontSize:12}}><span style={{display:'flex',gap:6,alignItems:'center',minWidth:0}}><span style={{width:9,height:9,borderRadius:3,background:palette[i],flexShrink:0}}/><span style={{overflow:'hidden',textOverflow:'ellipsis'}}>{c.name}</span></span><strong style={{whiteSpace:'nowrap'}}>{fmtMoney(c.value,sym)}</strong></div>)}</div>
+        </div>:<p style={{fontSize:13,color:T.grey600,padding:'30px 0'}}>No fully paid invoices in this period yet.</p>}
+      </section>
+      <section style={graphCard}>
+        <div style={titleStyle}>Revenue trend</div>
+        <p style={{fontSize:12,color:T.grey600,marginBottom:14}}>Invoiced versus fully paid invoices</p>
+        <div style={{display:'flex',gap:10,alignItems:'end',height:174,borderBottom:'1px solid #CBD5E1',padding:'0 3px 4px'}}>
+          {series.map((x,i)=><div key={i} style={{flex:1,minWidth:0,display:'flex',flexDirection:'column',alignItems:'center',gap:6,height:'100%',justifyContent:'end'}}>
+            <div style={{width:'100%',height:145,display:'flex',alignItems:'end',justifyContent:'center',gap:3}}>
+              <div title={`Invoiced: ${fmtMoney(x.invoiced,sym)}`} style={{width:'35%',maxWidth:24,height:`${Math.max(x.invoiced?3:0,x.invoiced/peak*100)}%`,background:T.blue,borderRadius:'4px 4px 0 0'}}/>
+              <div title={`Paid: ${fmtMoney(x.paid,sym)}`} style={{width:'35%',maxWidth:24,height:`${Math.max(x.paid?3:0,x.paid/peak*100)}%`,background:T.green,borderRadius:'4px 4px 0 0'}}/>
+            </div><span style={{fontSize:11,color:T.grey600}}>{x.label}</span>
+          </div>)}
         </div>
-      </div>
-      {debtorList.length>0&&(
-        <div className="card">
-          <div style={{fontWeight:800,fontSize:13,color:T.navy,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:14}}>Outstanding Debtors</div>
-          {debtorList.map(d=>(
-            <div key={d.name} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:`1px solid ${T.grey100}`}}>
-              <div>
-                <div style={{fontSize:13,fontWeight:600,color:d.overdue?T.red:T.navy}}>{d.name}</div>
-                {d.overdue&&<div style={{fontSize:10,color:T.red,fontWeight:700}}>OVERDUE</div>}
-              </div>
-              <div style={{fontWeight:700,color:d.overdue?T.red:T.navy}}>{fmtMoney(d.total,sym)}</div>
-            </div>
-          ))}
-        </div>
-      )}
+        <p style={{fontSize:11,color:T.grey600,marginTop:12}}>🔵 Invoiced &nbsp; 🟢 Paid</p>
+      </section>
+      <section style={graphCard}>
+        <div style={titleStyle}>Outstanding debtors</div>
+        <p style={{fontSize:12,color:T.grey600,marginBottom:15}}>Ageing of unpaid invoices · all periods</p>
+        {ageing.map((x,i)=><div key={x.label} style={{marginBottom:12}}>
+          <div style={{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:5}}><span>{x.label}</span><strong>{fmtMoney(x.value,sym)}</strong></div>
+          <div style={{height:9,background:'#F1F4F8',borderRadius:6,overflow:'hidden'}}><div style={{height:'100%',width:`${x.value/maxAge*100}%`,background:i===0?T.teal:i===1?T.blue:i===2?T.amber:T.red,borderRadius:6}}/></div>
+        </div>)}
+        <button className="btn btn-gh btn-sm" onClick={()=>setPage('documents')}>View documents →</button>
+      </section>
+    </div>
+    <p style={{fontSize:11,color:T.grey600,marginBottom:20}}>Collected figures currently count invoices marked Paid. Partial payments and payment dates will require a dedicated payment ledger.</p>
+    <div className="card" style={{marginBottom:20}}>
+      <div style={{fontWeight:800,fontSize:13,color:T.navy,marginBottom:12}}>Quick create</div>
+      <div className="quick-actions">{DOC_TYPES.map(t=><button key={t.key} className="btn btn-s" onClick={()=>{setNewDocType(t.key);setPage('documents')}}>{t.label}</button>)}</div>
     </div>
     <div className="card0">
       <div style={{padding:'14px 18px',borderBottom:`1px solid ${T.grey200}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
@@ -438,17 +480,26 @@ function IndustrySuggestions({onInsert,clientName}){
 function parseDraftLines(input,vatReg){
   const lines=String(input||'').split(/\n|;/).map(x=>x.trim()).filter(Boolean)
   if(lines.length>40)return {error:'Use 40 line items or fewer per draft.'}
-  const result=[]
+  const items=[],unresolved=[]
   for(const line of lines){
-    // A line must include an explicit price; no amount is ever invented.
-    const qtyRate=line.match(/^\s*(\d+(?:\.\d+)?)\s*[x×]\s*(.+?)\s*(?:@|at)\s*R?\s*(\d+(?:[.,]\d{1,2})?)\s*$/i)
-    const simple=line.match(/^\s*(.+?)\s*(?:-|:|@)\s*R\s*(\d+(?:[.,]\d{1,2})?)\s*$/i)
-    const data=qtyRate?{qty:Number(qtyRate[1]),desc:qtyRate[2],rate:Number(qtyRate[3].replace(',','.'))}:simple?{qty:1,desc:simple[1],rate:Number(simple[2].replace(',','.'))}:null
-    if(!data||!data.desc.trim()||!Number.isFinite(data.rate)||!Number.isFinite(data.qty)||data.qty<=0||data.rate<0||data.qty>100000||data.rate>100000000)return {error:'Could not read: '+line+'. Use “Description - R250” or “2 x Description @ R280”.'}
-    result.push({id:uid(),desc:data.desc.trim(),qty:data.qty,unit:'',rate:data.rate,vatRate:vatReg?15:0,discount:0})
+    const amounts=[...line.matchAll(/(?:R|ZAR|rand)\s*([\d ]+(?:[.,]\d{1,2})?)/gi)]
+    if(amounts.length!==1){unresolved.push(line);continue}
+    const m=amounts[0],rate=Number(m[1].replace(/\s/g,'').replace(',','.'))
+    let desc=(line.slice(0,m.index)+' '+line.slice(m.index+m[0].length)).replace(/^[\s:=-]+|[\s:=-]+$/g,'').trim()
+    let qty=1
+    const prefix=desc.match(/^(\d+(?:[.,]\d+)?)\s*(?:x|×|units? of|items? of)\s+/i)
+    const suffix=desc.match(/\s+[x×]\s*(\d+(?:[.,]\d+)?)$/i)
+    const labelled=desc.match(/\b(?:quantity|qty)\s*[:=]?\s*(\d+(?:[.,]\d+)?)/i)
+    if(prefix){qty=Number(prefix[1].replace(',','.'));desc=desc.slice(prefix[0].length)}
+    else if(suffix){qty=Number(suffix[1].replace(',','.'));desc=desc.slice(0,suffix.index)}
+    else if(labelled){qty=Number(labelled[1].replace(',','.'));desc=desc.replace(labelled[0],'').trim()}
+    desc=desc.replace(/^(?:please\s+)?(?:add|invoice|charge|bill|include)\s+(?:me\s+|for\s+|the\s+)?/i,'').replace(/\b(?:at|for|each|per item|costs?)\s*$/i,'').trim()
+    if(!desc||!Number.isFinite(rate)||!Number.isFinite(qty)||qty<=0||rate<0||qty>100000||rate>100000000){unresolved.push(line);continue}
+    items.push({id:uid(),desc,qty,unit:'',rate,vatRate:vatReg?15:0,discount:0})
   }
-  if(!result.length)return {error:'Enter at least one priced line item.'}
-  return {items:result}
+  if(unresolved.length)return {error:'Please clarify these lines (include one price per item): '+unresolved.join(' | ')}
+  if(!items.length)return {error:'Describe the work and include a price, for example “Charge for hosting R250”.'}
+  return {items}
 }
 function DraftAssist({vatReg,sym,onApply}){
   const [open,setOpen]=useState(false)
@@ -458,7 +509,7 @@ function DraftAssist({vatReg,sym,onApply}){
   return <div style={{margin:'8px 0 12px'}}>
     <button type="button" className="btn btn-gh btn-sm" onClick={()=>setOpen(!open)}>✦ Draft Assist {open?'▴':'▾'}</button>
     {open&&<div style={{padding:12,marginTop:8,border:'1px solid #E2E8F0',borderRadius:9,background:'#F8FAFC'}}>
-      <div style={{fontSize:12,color:'#475569',marginBottom:8}}>Describe each item with its price. One per line. This first version uses local rules, not an AI model.</div>
+      <div style={{fontSize:12,color:'#475569',marginBottom:8}}>Write naturally, one item per line. Include one price per item; unclear details will be flagged for review.</div>
       <textarea className="inp" aria-label="Draft invoice items" rows={4} value={input} onChange={e=>{setInput(e.target.value);setResult(null)}} placeholder={'Website hosting - R250\n2 x Email accounts @ R165'}/>
       <button type="button" className="btn btn-gh btn-sm" onClick={generate} style={{marginTop:8}}>Preview draft</button>
       {result?.error&&<div role="alert" style={{color:'#B91C1C',fontSize:12,marginTop:8}}>{result.error}</div>}
@@ -655,7 +706,17 @@ function DocPrint({doc,company,onBack}){
         heightLeft-=contentH;page++
       }
       const safeNumber=(doc.number||'document').replace(/[^a-z0-9-_]/gi,'_')
-      pdf.save(`${dt.label.replace(/\s+/g,'-')}-${safeNumber}.pdf`)
+      const blob=pdf.output('blob')
+      const filename=`${dt.label.replace(/\s+/g,'-')}-${safeNumber}.pdf`
+      const file=new File([blob],filename,{type:'application/pdf'})
+      if(isMobileDevice()&&navigator.canShare?.({files:[file]})){
+        try{await navigator.share({files:[file],title:filename});return}
+        catch(shareError){if(shareError.name==='AbortError')return}
+      }
+      const url=URL.createObjectURL(blob)
+      const link=document.createElement('a')
+      link.href=url;link.download=filename;document.body.appendChild(link);link.click();link.remove()
+      setTimeout(()=>URL.revokeObjectURL(url),60000)
     }catch(e){
       alert('Could not generate PDF: '+e.message)
     }finally{
@@ -1134,7 +1195,7 @@ export default function Dashboard(){
   const [subscription,setSubscription]=useState(null)
 
   useEffect(()=>{
-    const style=document.createElement('style');style.textContent=CSS;document.head.appendChild(style)
+    const style=document.createElement('style');style.textContent=CSS+MOBILE_NAV_CSS;document.head.appendChild(style)
     const mq=window.matchMedia('(max-width:768px)');setIsMobile(mq.matches);mq.addEventListener('change',e=>setIsMobile(e.matches))
     return()=>document.head.removeChild(style)
   },[])
@@ -1308,6 +1369,14 @@ export default function Dashboard(){
       </div>
       <div className="content">{pages[page]||pages.dashboard}</div>
     </div>
+    {isMobile&&<nav className="mobile-bottom-nav no-print" aria-label="Main navigation">
+      {NAV.map(n=><button key={n.id} type="button" aria-current={page===n.id?'page':undefined} onClick={()=>{setPage(n.id);setSidebarOpen(false);setNewDocType(null)}}>
+        <span className="bottom-icon" aria-hidden="true">{n.icon}</span><span>{n.label}</span>
+      </button>)}
+      <button type="button" aria-label="More settings and account options" onClick={()=>setSidebarOpen(true)}>
+        <span className="bottom-icon" aria-hidden="true">☰</span><span>More</span>
+      </button>
+    </nav>}
     {toast&&<Toast msg={toast} onDone={()=>setToast(null)}/>}
   </div>
 }
